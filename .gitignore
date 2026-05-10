@@ -1,0 +1,8 @@
+.venv/
+__pycache__/
+.env
+*.json
+credentials/
+.DS_Store
+.vscode/
+outputs/
