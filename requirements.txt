@@ -2,3 +2,4 @@ google-cloud-bigquery
 python-dotenv
 pillow
 discord.py
+requests

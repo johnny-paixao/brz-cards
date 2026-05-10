@@ -29,17 +29,28 @@ class BRzCardsBot(discord.Client):
 
     async def setup_hook(self) -> None:
         """
-        Sync slash commands directly with the BRz Discord server.
-        Guild sync is faster than global sync during development.
+        Sync slash commands directly with the BRz Discord server
+        and remove old global commands to avoid duplicates.
         """
         guild = discord.Object(id=int(DISCORD_GUILD_ID))
 
+        # First, copy the locally defined command to the BRz server.
         self.tree.copy_global_to(guild=guild)
-        synced_commands = await self.tree.sync(guild=guild)
+
+        # Sync the command only to the BRz server.
+        synced_guild_commands = await self.tree.sync(guild=guild)
+
+        # Then remove old global commands that may have been created before.
+        self.tree.clear_commands(guild=None)
+        synced_global_commands = await self.tree.sync()
 
         print(
-            f"Synced {len(synced_commands)} command(s) "
+            f"Synced {len(synced_guild_commands)} command(s) "
             f"to guild {DISCORD_GUILD_ID}."
+        )
+        print(
+            f"Cleared global commands. "
+            f"Global command count: {len(synced_global_commands)}."
         )
 
 
