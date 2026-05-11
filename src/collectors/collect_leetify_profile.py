@@ -2,7 +2,6 @@ import sys
 from pathlib import Path
 
 
-# Allow imports from the src directory when running this script directly.
 SRC_DIR = Path(__file__).resolve().parents[1]
 sys.path.append(str(SRC_DIR))
 
@@ -12,6 +11,7 @@ from database.bigquery_client import (
     insert_api_snapshot,
     update_player_leetify_profile,
     upsert_leetify_recent_matches,
+    update_player_faceit_level_from_leetify_matches,
 )
 
 
@@ -72,6 +72,12 @@ def main() -> None:
 
         print(f"Player updated: {display_name}")
         print(f"Recent matches processed: {processed_matches}")
+        print(f"Player updated: {display_name}")
+        print(f"Recent matches processed: {len(recent_matches)}")
+
+        faceit_level = update_player_faceit_level_from_leetify_matches(player_id)
+
+        print(f"FACEIT level from Leetify matches: {faceit_level}")
 
 
 if __name__ == "__main__":

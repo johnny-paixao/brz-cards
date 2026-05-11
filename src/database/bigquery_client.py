@@ -574,4 +574,222 @@ def insert_player_card_score(card_score: dict) -> str:
 
     client.query(query, job_config=job_config).result()
 
+
     return card_score_id
+
+
+def update_player_steam_profile(
+    player_id: str,
+    steam_avatar_url: str | None,
+    steam_country_code: str | None,
+) -> None:
+    """
+    Update Steam avatar and raw Steam country fields in players table.
+
+    Important:
+    - country_code is the BRz card display country.
+    - steam_country_code is the country returned by Steam, when available.
+    """
+    client = get_bigquery_client()
+
+    query = f"""
+        UPDATE `{PROJECT_ID}.{DATASET_ID}.players`
+        SET
+          steam_avatar_url = COALESCE(@steam_avatar_url, steam_avatar_url),
+          steam_country_code = COALESCE(@steam_country_code, steam_country_code),
+          updated_at = CURRENT_TIMESTAMP()
+        WHERE player_id = @player_id
+    """
+
+    job_config = bigquery.QueryJobConfig(
+        query_parameters=[
+            bigquery.ScalarQueryParameter("player_id", "STRING", player_id),
+            bigquery.ScalarQueryParameter(
+                "steam_avatar_url",
+                "STRING",
+                steam_avatar_url,
+            ),
+            bigquery.ScalarQueryParameter(
+                "steam_country_code",
+                "STRING",
+                steam_country_code,
+            ),
+        ],
+        maximum_bytes_billed=20 * 1024 * 1024,
+    )
+
+    client.query(query, job_config=job_config).result()
+
+
+def get_player_profile(player_id: str) -> dict | None:
+    """
+    Get player profile fields needed to render the BRz card.
+    """
+    client = get_bigquery_client()
+
+    query = f"""
+        SELECT
+          player_id,
+          display_name,
+          country_code,
+          photo_path,
+          faceit_avatar_url,
+          steam_avatar_url,
+          faceit_level
+        FROM `{PROJECT_ID}.{DATASET_ID}.players`
+        WHERE player_id = @player_id
+        LIMIT 1
+    """
+
+    job_config = bigquery.QueryJobConfig(
+        query_parameters=[
+            bigquery.ScalarQueryParameter("player_id", "STRING", player_id),
+        ],
+        maximum_bytes_billed=20 * 1024 * 1024,
+    )
+
+    rows = list(client.query(query, job_config=job_config).result())
+
+    if not rows:
+        return None
+
+    row = rows[0]
+
+    return {
+        "player_id": row["player_id"],
+        "display_name": row["display_name"],
+        "country_code": row["country_code"],
+        "photo_path": row["photo_path"],
+        "faceit_avatar_url": row["faceit_avatar_url"],
+        "steam_avatar_url": row["steam_avatar_url"],
+        "faceit_level": row["faceit_level"],
+    }
+
+def get_latest_player_card_by_player_id(player_id: str) -> dict | None:
+    """
+    Get the latest BRz card score for a player by player_id.
+    """
+    client = get_bigquery_client()
+
+    query = f"""
+        SELECT
+          player_id,
+          display_name,
+          overall_brz,
+          aim,
+          impact,
+          utility,
+          consistency,
+          clutch,
+          experience,
+          role,
+          tier,
+          matches_analyzed,
+          score_version,
+          calculated_at
+        FROM `{PROJECT_ID}.{DATASET_ID}.player_card_scores`
+        WHERE player_id = @player_id
+        ORDER BY calculated_at DESC
+        LIMIT 1
+    """
+
+    job_config = bigquery.QueryJobConfig(
+        query_parameters=[
+            bigquery.ScalarQueryParameter("player_id", "STRING", player_id),
+        ],
+        maximum_bytes_billed=20 * 1024 * 1024,
+    )
+
+    rows = list(client.query(query, job_config=job_config).result())
+
+    if not rows:
+        return None
+
+    row = rows[0]
+
+    return {
+        "player_id": row["player_id"],
+        "display_name": row["display_name"],
+        "overall_brz": row["overall_brz"],
+        "aim": row["aim"],
+        "impact": row["impact"],
+        "utility": row["utility"],
+        "consistency": row["consistency"],
+        "clutch": row["clutch"],
+        "experience": row["experience"],
+        "role": row["role"],
+        "tier": row["tier"],
+        "matches_analyzed": row["matches_analyzed"],
+        "score_version": row["score_version"],
+        "calculated_at": row["calculated_at"],
+    }
+
+
+def update_player_faceit_level_from_leetify_matches(player_id: str) -> int | None:
+    """
+    Update players.faceit_level using the latest FACEIT rank found in
+    player_match_stats collected from Leetify.
+
+    This does not call the FACEIT API.
+    It uses Leetify match data already stored in BigQuery.
+
+    Logic:
+    - source must be 'leetify'
+    - match_source must be 'faceit'
+    - rank must be between 1 and 10
+    - latest match_date wins
+    """
+    client = get_bigquery_client()
+
+    query = f"""
+        UPDATE `{PROJECT_ID}.{DATASET_ID}.players` AS p
+        SET
+          faceit_level = latest_faceit.faceit_level,
+          updated_at = CURRENT_TIMESTAMP()
+        FROM (
+          SELECT
+            player_id,
+            rank AS faceit_level
+          FROM `{PROJECT_ID}.{DATASET_ID}.player_match_stats`
+          WHERE player_id = @player_id
+            AND source = 'leetify'
+            AND match_source = 'faceit'
+            AND rank BETWEEN 1 AND 10
+          QUALIFY ROW_NUMBER() OVER (
+            PARTITION BY player_id
+            ORDER BY match_date DESC
+          ) = 1
+        ) AS latest_faceit
+        WHERE p.player_id = latest_faceit.player_id
+    """
+
+    job_config = bigquery.QueryJobConfig(
+        query_parameters=[
+            bigquery.ScalarQueryParameter("player_id", "STRING", player_id),
+        ],
+        maximum_bytes_billed=20 * 1024 * 1024,
+    )
+
+    client.query(query, job_config=job_config).result()
+
+    validation_query = f"""
+        SELECT
+          faceit_level
+        FROM `{PROJECT_ID}.{DATASET_ID}.players`
+        WHERE player_id = @player_id
+        LIMIT 1
+    """
+
+    validation_job_config = bigquery.QueryJobConfig(
+        query_parameters=[
+            bigquery.ScalarQueryParameter("player_id", "STRING", player_id),
+        ],
+        maximum_bytes_billed=20 * 1024 * 1024,
+    )
+
+    rows = list(client.query(validation_query, job_config=validation_job_config).result())
+
+    if not rows:
+        return None
+
+    return rows[0]["faceit_level"]
