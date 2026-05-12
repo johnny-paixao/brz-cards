@@ -1,5 +1,4 @@
 import os
-from pathlib import Path
 
 import discord
 from discord import app_commands
@@ -21,6 +20,17 @@ if not DISCORD_GUILD_ID:
     raise ValueError("DISCORD_GUILD_ID is missing. Check your .env file.")
 
 
+def normalize_player_identifier(player_name: str) -> str:
+    """
+    Normalize user input into a player identifier format.
+    Example:
+    Johnny -> johnny
+    brz johnny -> brz_johnny
+    """
+    normalized = player_name.strip().lower().replace(" ", "_")
+    return normalized
+
+
 class BRzCardsBot(discord.Client):
     def __init__(self) -> None:
         intents = discord.Intents.default()
@@ -34,13 +44,13 @@ class BRzCardsBot(discord.Client):
         """
         guild = discord.Object(id=int(DISCORD_GUILD_ID))
 
-        # First, copy the locally defined command to the BRz server.
+        # Copy global commands to the target guild
         self.tree.copy_global_to(guild=guild)
 
-        # Sync the command only to the BRz server.
+        # Sync only to the guild for faster development/testing
         synced_guild_commands = await self.tree.sync(guild=guild)
 
-        # Then remove old global commands that may have been created before.
+        # Clear old global commands if they exist
         self.tree.clear_commands(guild=None)
         synced_global_commands = await self.tree.sync()
 
@@ -80,35 +90,57 @@ async def brzcards(interaction: discord.Interaction, player_name: str) -> None:
     """
     await interaction.response.defer(thinking=True)
 
-    card_data = get_latest_player_card(player_name)
+    try:
+        # Busca dados da carta no BigQuery apenas para validar o player
+        # e montar a mensagem de resposta.
+        card_data = get_latest_player_card(player_name)
 
-    if card_data is None:
-        await interaction.followup.send(
-            f"Não encontrei uma carta para o player `{player_name}`."
+        if card_data is None:
+            await interaction.followup.send(
+                f"Não encontrei uma carta para o player `{player_name}`."
+            )
+            return
+
+        # Tenta resolver o identificador correto do player para o card generator.
+        # Preferência: usar um ID/slug vindo do BigQuery, se existir.
+        player_identifier = (
+            card_data.get("player_id")
+            or card_data.get("player_slug")
+            or card_data.get("player_code")
+            or normalize_player_identifier(player_name)
         )
-        return
 
-    safe_player_name = card_data["display_name"].lower().replace(" ", "_")
-    output_path = Path(f"outputs/cards/{safe_player_name}_card.png")
+        # Gera a carta usando o fluxo atual do card_generator.
+        # A expectativa é que essa função retorne o caminho final da imagem gerada.
+        card_path = generate_player_card(player_identifier)
 
-    generate_player_card(
-        card_data=card_data,
-        output_path=output_path,
-    )
+        display_name = (
+            card_data.get("display_name")
+            or card_data.get("player_name")
+            or player_name
+        )
+        overall_brz = card_data.get("overall_brz")
+        score_version = card_data.get("score_version")
 
-    discord_file = discord.File(
-        fp=output_path,
-        filename=f"{safe_player_name}_card.png",
-    )
+        content_lines = [f"**BRz Card — {display_name}**"]
 
-    await interaction.followup.send(
-        content=(
-            f"**BRz Card — {card_data['display_name']}**\n"
-            f"Overall BRz: **{card_data['overall_brz']}**\n"
-            f"Score version: `{card_data['score_version']}`"
-        ),
-        file=discord_file,
-    )
+        if overall_brz is not None:
+            content_lines.append(f"Overall BRz: **{overall_brz}**")
+
+        if score_version:
+            content_lines.append(f"Score version: `{score_version}`")
+
+        await interaction.followup.send(
+            content="\n".join(content_lines),
+            file=discord.File(card_path),
+        )
+
+    except Exception as e:
+        print(f"Error generating BRz card for '{player_name}': {e}")
+
+        await interaction.followup.send(
+            "Não consegui gerar a carta agora. Ocorreu um erro no processo de geração."
+        )
 
 
 client.run(DISCORD_BOT_TOKEN)

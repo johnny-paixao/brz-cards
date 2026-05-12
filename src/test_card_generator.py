@@ -1,4 +1,11 @@
-from cards.card_generator import generate_player_card
+from cards.card_generator import generate_player_card_from_faceit_csv
 
-output = generate_player_card("brz_johnny")
-print(f"Card generated successfully: {output}")
+
+def main() -> None:
+    output_path = generate_player_card_from_faceit_csv("JohnnyPanda")
+
+    print(f"Card generated successfully: {output_path}")
+
+
+if __name__ == "__main__":
+    main()

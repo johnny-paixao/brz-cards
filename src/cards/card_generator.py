@@ -1,3 +1,4 @@
+import csv
 from io import BytesIO
 from pathlib import Path
 
@@ -12,6 +13,7 @@ from database.bigquery_client import (
 
 BASE_DIR = Path(__file__).resolve().parents[2]
 
+DATA_DIR = BASE_DIR / "data"
 ASSETS_DIR = BASE_DIR / "assets"
 TEMPLATES_DIR = ASSETS_DIR / "templates"
 LOGOS_DIR = ASSETS_DIR / "logos"
@@ -21,6 +23,8 @@ PLACEHOLDERS_DIR = ASSETS_DIR / "placeholders"
 GENERATED_DIR = ASSETS_DIR / "generated"
 FONTS_DIR = ASSETS_DIR / "fonts"
 FACEIT_LEVELS_DIR = ASSETS_DIR / "faceit_levels"
+
+BRZ_CARD_SCORES_V2_CSV_PATH = DATA_DIR / "brz_card_scores_v2.csv"
 
 TEMPLATE_PATH = TEMPLATES_DIR / "brz_card_template.png"
 LOGO_PATH = LOGOS_DIR / "brz_logo.png"
@@ -35,9 +39,9 @@ GENERATED_DIR.mkdir(parents=True, exist_ok=True)
 
 
 BOXES = {
-    "logo": {"x": 88, "y": 265, "w": 123, "h": 123},
+    "logo": {"x": 96, "y": 273, "w": 105, "h": 105},
     "flag": {"x": 109, "y": 210, "w": 81, "h": 54},
-    "role": {"x": 109, "y": 173, "w": 81, "h": 30},
+    "role": {"x": 99, "y": 174, "w": 101, "h": 28},
     "overall": {"x": 109, "y": 89, "w": 81, "h": 81},
     "name": {"x": 225, "y": 349, "w": 249, "h": 49},
     "faceit_level": {"x": 270, "y": 520, "w": 60, "h": 60},
@@ -54,12 +58,6 @@ BOXES = {
 
 
 def _prepare_template_canvas(template: Image.Image) -> Image.Image:
-    """
-    The template file may be 800x800, but all layout coordinates were
-    measured on a 600x600 Kittl canvas.
-
-    Therefore, before drawing anything, we resize the template to 600x600.
-    """
     template = template.convert("RGBA")
 
     if template.size == (CANVAS_SIZE, CANVAS_SIZE):
@@ -72,11 +70,6 @@ def _prepare_template_canvas(template: Image.Image) -> Image.Image:
 
 
 def _font_candidates(kind: str) -> list[Path | str]:
-    """
-    Font priority:
-    1. Project fonts inside assets/fonts
-    2. Common Windows fonts
-    """
     if kind == "overall":
         return [
             FONT_OVERALL_PATH,
@@ -124,9 +117,6 @@ def _fit_font(
     min_size: int = 10,
     stroke_width: int = 0,
 ) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
-    """
-    Reduce font size until the text fits inside the target box.
-    """
     size = start_size
 
     while size >= min_size:
@@ -187,41 +177,30 @@ def _load_logo() -> Image.Image | None:
 
 
 def _load_faceit_level_badge(level: int) -> Image.Image | None:
-    """
-    Load FACEIT level badge from assets/faceit_levels/{level}.png
-    """
-    print(f"[DEBUG] FACEIT level recebido: {level}")
-
     if not level or level < 1:
-        print("[DEBUG] FACEIT level inválido")
         return None
 
     badge_path = FACEIT_LEVELS_DIR / f"{level}.png"
-    print(f"[DEBUG] procurando badge em: {badge_path}")
 
     if not badge_path.exists():
-        print("[DEBUG] badge não encontrada")
         return None
 
-    print("[DEBUG] badge encontrada com sucesso")
     return Image.open(badge_path).convert("RGBA")
 
 
 def _load_player_image(profile: dict) -> tuple[Image.Image | None, str | None]:
     """
     Image priority:
-    1. photo_path from BigQuery
+    1. photo_path from profile
     2. assets/players/{player_id}.png
     3. assets/players/{player_id}.jpg
     4. assets/players/{player_id}.jpeg
-    5. FACEIT avatar URL
-    6. Steam avatar URL
-    7. placeholder
+
+    If no local image exists, return None.
+    The card should not use FACEIT/Steam avatar fallback anymore.
     """
     player_id = profile.get("player_id")
     photo_path = profile.get("photo_path")
-    faceit_avatar_url = profile.get("faceit_avatar_url")
-    steam_avatar_url = profile.get("steam_avatar_url")
 
     if photo_path:
         local_path = BASE_DIR / photo_path
@@ -240,31 +219,10 @@ def _load_player_image(profile: dict) -> tuple[Image.Image | None, str | None]:
             if local_path.exists():
                 return _load_local_image(local_path), "local"
 
-    if faceit_avatar_url:
-        image = _download_image(faceit_avatar_url)
-
-        if image:
-            return image, "avatar"
-
-    if steam_avatar_url:
-        image = _download_image(steam_avatar_url)
-
-        if image:
-            return image, "avatar"
-
-    placeholder_path = PLACEHOLDERS_DIR / "default_avatar.png"
-
-    if placeholder_path.exists():
-        return _load_local_image(placeholder_path), "avatar"
-
     return None, None
 
 
 def _paste_contain(base: Image.Image, image: Image.Image, box: dict) -> None:
-    """
-    Paste image inside the box preserving the whole image.
-    Best for logos, badges and local cutout/player photos.
-    """
     img = image.copy()
     img.thumbnail((box["w"], box["h"]), Image.Resampling.LANCZOS)
 
@@ -275,10 +233,6 @@ def _paste_contain(base: Image.Image, image: Image.Image, box: dict) -> None:
 
 
 def _paste_cover(base: Image.Image, image: Image.Image, box: dict) -> None:
-    """
-    Fill the box completely, cropping if needed.
-    Best for square avatars from Steam/FACEIT.
-    """
     fitted = ImageOps.fit(
         image,
         (box["w"], box["h"]),
@@ -297,10 +251,6 @@ def _paste_player_photo_bottom_aligned(
     x_offset: int = 0,
     y_offset: int = 0,
 ) -> None:
-    """
-    Paste player photo larger and bottom-aligned.
-    This version does not clip the photo inside the box.
-    """
     img = image.copy()
 
     scale = max(box["w"] / img.width, box["h"] / img.height)
@@ -327,15 +277,8 @@ def _paste_player_photo_framed(
     x_shift: int = 12,
     y_shift: int = 0,
 ) -> None:
-    """
-    Paste local community photo smaller, better framed, and visually shifted
-    a bit to the right.
-
-    This avoids the player looking too large.
-    """
     img = image.copy()
 
-    # Fit whole player inside the box instead of overscaling.
     scale = min(box["w"] / img.width, box["h"] / img.height)
     scale *= scale_factor
 
@@ -344,10 +287,7 @@ def _paste_player_photo_framed(
 
     img = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
 
-    # Center horizontally, then move a bit to the right.
     x = box["x"] + (box["w"] - new_w) // 2 + x_shift
-
-    # Keep the player resting on the bottom area.
     y = box["y"] + box["h"] - new_h + y_shift
 
     layer = Image.new("RGBA", base.size, (0, 0, 0, 0))
@@ -355,30 +295,7 @@ def _paste_player_photo_framed(
     base.alpha_composite(layer)
 
 
-def _get_faceit_badge_visual_box(size: int = 60) -> dict:
-    """
-    Create a bigger visual box centered on the original FACEIT level anchor.
-    The template circle is bigger than the old 41x41 area, so this helps the
-    badge appear centered and more visible.
-    """
-    src = BOXES["faceit_level"]
-
-    cx = src["x"] + src["w"] / 2
-    cy = src["y"] + src["h"] / 2
-
-    return {
-        "x": int(cx - size / 2),
-        "y": int(cy - size / 2),
-        "w": size,
-        "h": size,
-    }
-
-
 def _crop_final_card_sides(image: Image.Image, crop_each_side: int = 40) -> Image.Image:
-    """
-    Crop left and right sides equally.
-    Example: 600x600 -> 520x600 if crop_each_side=40
-    """
     w, h = image.size
 
     if crop_each_side <= 0:
@@ -388,6 +305,7 @@ def _crop_final_card_sides(image: Image.Image, crop_each_side: int = 40) -> Imag
         return image
 
     return image.crop((crop_each_side, 0, w - crop_each_side, h))
+
 
 def _paste_image_in_box(
     base: Image.Image,
@@ -400,42 +318,6 @@ def _paste_image_in_box(
         return
 
     _paste_contain(base, image, box)
-
-
-def _paste_faceit_badge_emphasized(
-    base: Image.Image,
-    image: Image.Image,
-    box: dict,
-    render_size: int = 54,
-) -> None:
-    """
-    Paste FACEIT badge centered in the bottom circle with more visual impact.
-    The measured box is 41x41, but the rendered badge can be slightly bigger
-    to look stronger inside the circle.
-    """
-    badge = image.copy()
-    badge.thumbnail((render_size, render_size), Image.Resampling.LANCZOS)
-
-    cx, cy = _box_center(box)
-
-    # soft golden glow behind the badge
-    glow_size = render_size + 14
-    glow = Image.new("RGBA", (glow_size, glow_size), (0, 0, 0, 0))
-    glow_draw = ImageDraw.Draw(glow)
-    glow_draw.ellipse(
-        (0, 0, glow_size - 1, glow_size - 1),
-        fill=(255, 190, 40, 80),
-    )
-    glow = glow.filter(ImageFilter.GaussianBlur(6))
-
-    glow_x = int(cx - glow.width / 2)
-    glow_y = int(cy - glow.height / 2)
-
-    badge_x = int(cx - badge.width / 2)
-    badge_y = int(cy - badge.height / 2)
-
-    base.alpha_composite(glow, (glow_x, glow_y))
-    base.alpha_composite(badge, (badge_x, badge_y))
 
 
 def _draw_centered_text(
@@ -550,13 +432,6 @@ def _draw_overall_gold(
     box: dict,
     start_size: int = 76,
 ) -> Image.Image:
-    """
-    Draw overall with a strong golden effect:
-    - dark shadow
-    - golden glow
-    - metallic gradient
-    - golden outline
-    """
     dummy_draw = ImageDraw.Draw(base_img)
 
     font = _fit_font(
@@ -657,10 +532,6 @@ def _draw_faceit_level_number(
     box: dict,
     start_size: int = 30,
 ) -> Image.Image:
-    """
-    Draw FACEIT level number only when the real level exists.
-    This function should never receive a fake fallback value.
-    """
     if not text:
         return base_img
 
@@ -712,22 +583,48 @@ def _draw_faceit_level_number(
 
 
 def _parse_faceit_level(value) -> int | None:
-    """
-    Parse FACEIT level safely.
-
-    The card must not invent a FACEIT level.
-    If the value is missing or invalid, return None.
-    """
     if value in (None, ""):
         return None
 
     try:
-        level = int(value)
+        level = int(float(value))
     except (TypeError, ValueError):
         return None
 
     if 1 <= level <= 10:
         return level
+
+    return None
+
+
+def _safe_int_from_score(value, default: int = 0) -> int:
+    try:
+        return int(round(float(value)))
+    except (TypeError, ValueError):
+        return default
+
+
+def _get_card_score_v2_from_csv(faceit_nickname: str) -> dict | None:
+    if not BRZ_CARD_SCORES_V2_CSV_PATH.exists():
+        raise FileNotFoundError(
+            f"BRz Card Scores v2 CSV not found: {BRZ_CARD_SCORES_V2_CSV_PATH}"
+        )
+
+    target = faceit_nickname.strip().lower()
+
+    with open(
+        BRZ_CARD_SCORES_V2_CSV_PATH,
+        mode="r",
+        encoding="utf-8-sig",
+        newline="",
+    ) as file:
+        reader = csv.DictReader(file)
+
+        for row in reader:
+            nickname = str(row.get("faceit_nickname", "")).strip().lower()
+
+            if nickname == target:
+                return row
 
     return None
 
@@ -751,6 +648,26 @@ def _build_player_data(profile: dict, card_data: dict) -> dict:
     }
 
 
+def _build_player_data_from_v2_csv(row: dict) -> dict:
+    faceit_level = _parse_faceit_level(row.get("cs2_skill_level"))
+    faceit_nickname = row.get("faceit_nickname") or "Unknown"
+
+    return {
+        "player_id": faceit_nickname,
+        "name": faceit_nickname,
+        "country_code": row.get("country") or "PT",
+        "faceit_level": faceit_level,
+        "overall": _safe_int_from_score(row.get("OVERALL")),
+        "role": row.get("ROLE") or "RIFLER",
+        "aim": _safe_int_from_score(row.get("AIM")),
+        "imp": _safe_int_from_score(row.get("IMP")),
+        "utl": _safe_int_from_score(row.get("UTL")),
+        "con": _safe_int_from_score(row.get("CON")),
+        "clt": _safe_int_from_score(row.get("CLT")),
+        "exp": _safe_int_from_score(row.get("EXP")),
+    }
+
+
 def _render_card(
     template: Image.Image,
     profile: dict,
@@ -758,28 +675,18 @@ def _render_card(
 ) -> Image.Image:
     base = template.convert("RGBA")
 
-    # 1) Player photo first, behind all text/logo/flag elements.
     player_image, image_source = _load_player_image(profile)
 
     if player_image:
-        if image_source == "local":
-            _paste_player_photo_bottom_aligned(
-                base=base,
-                image=player_image,
-                box=BOXES["player_photo"],
-                zoom=1.0,
-                x_offset=10,
-                y_offset=0,
-            )
-        else:
-            _paste_image_in_box(
-                base=base,
-                image=player_image,
-                box=BOXES["player_photo"],
-                mode="cover",
-            )
+        _paste_player_photo_bottom_aligned(
+            base=base,
+            image=player_image,
+            box=BOXES["player_photo"],
+            zoom=1.0,
+            x_offset=10,
+            y_offset=0,
+        )
 
-    # 2) Static BRz logo.
     logo = _load_logo()
 
     if logo:
@@ -790,7 +697,6 @@ def _render_card(
             mode="contain",
         )
 
-    # 3) Dynamic flag.
     flag = _load_flag(player_data["country_code"])
 
     if flag:
@@ -801,7 +707,6 @@ def _render_card(
             mode="cover",
         )
 
-    # 4) Overall with strong gold effect.
     base = _draw_overall_gold(
         base_img=base,
         text=str(player_data["overall"]),
@@ -811,24 +716,21 @@ def _render_card(
 
     draw = ImageDraw.Draw(base)
 
-    # 5) Role.
     _draw_centered_text(
         draw=draw,
         text=str(player_data["role"]).upper(),
         box=BOXES["role"],
         kind="main",
-        start_size=24,
+        start_size=23,
         fill=(255, 255, 255),
         stroke_fill=(4, 24, 18),
-        stroke_width=2,
-        min_size=12,
+        stroke_width=1,
+        min_size=10,
     )
 
-    # 6) Player name.
-    # Uppercase, left aligned, no black contour.
     _draw_left_aligned_text(
         draw=draw,
-        text=str(player_data["name"]).upper(),
+        text=str(player_data["name"]),
         box=BOXES["name"],
         kind="main",
         start_size=42,
@@ -839,8 +741,6 @@ def _render_card(
         left_padding=0,
     )
 
-    # 7) Dynamic stat values only.
-    # Stat labels are already static in the template.
     stat_style = {
         "kind": "stats",
         "start_size": 31,
@@ -858,7 +758,6 @@ def _render_card(
             **stat_style,
         )
 
-    # Dynamic Faceit level.
     faceit_level = player_data.get("faceit_level")
 
     if faceit_level is not None:
@@ -887,7 +786,9 @@ def _render_card(
                 box=BOXES["faceit_level"],
                 start_size=34,
             )
+
     return base
+
 
 def generate_player_card(
     player_id: str,
@@ -917,6 +818,7 @@ def generate_player_card(
         profile=profile,
         player_data=player_data,
     )
+
     card = _crop_final_card_sides(card, 40)
 
     if output_path is None:
@@ -930,15 +832,60 @@ def generate_player_card(
     return str(output_path)
 
 
+def generate_player_card_from_faceit_csv(
+    faceit_nickname: str,
+    output_path: str | Path | None = None,
+) -> str:
+    """
+    Generate BRz Card v2 from local FACEIT CSV scores.
+
+    Temporary integration for testing before moving v2 data to BigQuery.
+    """
+    row = _get_card_score_v2_from_csv(faceit_nickname)
+
+    if not row:
+        raise ValueError(
+            f"No BRz Card v2 score found for FACEIT nickname={faceit_nickname}"
+        )
+
+    if not TEMPLATE_PATH.exists():
+        raise FileNotFoundError(f"Template not found: {TEMPLATE_PATH}")
+
+    player_data = _build_player_data_from_v2_csv(row)
+
+    profile = {
+        "player_id": player_data["name"],
+        "photo_path": None,
+    }
+
+    template = _prepare_template_canvas(_load_local_image(TEMPLATE_PATH))
+
+    card = _render_card(
+        template=template,
+        profile=profile,
+        player_data=player_data,
+    )
+
+    card = _crop_final_card_sides(card, 40)
+
+    safe_name = str(player_data["name"]).lower().replace(" ", "_")
+
+    if output_path is None:
+        output_path = GENERATED_DIR / f"{safe_name}_card_v2.png"
+    else:
+        output_path = Path(output_path)
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    card.save(output_path)
+
+    return str(output_path)
+
+
 def generate_player_card_preview() -> str:
     """
-    Generate a preview using real BigQuery data.
-
-    This intentionally does not hardcode FACEIT level, stats, role or name.
-    If faceit_level is missing in BigQuery, nothing will be drawn in the
-    FACEIT level area.
+    Generate a preview using local BRz Card Scores v2 CSV.
     """
-    return generate_player_card(
-        player_id="brz_johnny",
-        output_path=GENERATED_DIR / "preview_card.png",
+    return generate_player_card_from_faceit_csv(
+        faceit_nickname="JohnnyPanda",
+        output_path=GENERATED_DIR / "preview_card_v2.png",
     )

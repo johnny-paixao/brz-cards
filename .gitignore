@@ -6,3 +6,27 @@ credentials/
 .DS_Store
 .vscode/
 outputs/
+
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Virtual environment
+.venv/
+venv/
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Generated cards
+assets/generated/
+
+# Local credentials
+credentials/
+*.key.json
+*service-account*.json
