@@ -1,1003 +1,862 @@
-# BRz Cards
+# 🃏 BRz Cards — FACEIT CS2 Game Cards
 
-Bot Discord em Python para gerar cartas personalizadas de jogadores da comunidade **BRz eSports**, usando dados coletados da **Leetify**, processados no **BigQuery** e renderizados em uma carta visual no estilo card de jogador.
-
-O comando principal do bot é:
-
-```bash
-/brzcards
-```
-
-Atualmente, o projeto está em desenvolvimento local no diretório:
-
-```bash
-C:\dev\brz-cards
-```
+![Status](https://img.shields.io/badge/status-em%20desenvolvimento-yellow)
+![Python](https://img.shields.io/badge/python-3.x-blue)
+![FACEIT API](https://img.shields.io/badge/data-FACEIT%20API-orange)
+![CS2](https://img.shields.io/badge/game-Counter--Strike%202-black)
+![BRz](https://img.shields.io/badge/community-BRz%20eSports-red)
 
 ---
 
-## Objetivo do projeto
+## 🎮 Sobre o projeto
 
-O objetivo do **BRz Cards** é criar cartas visuais de jogadores da comunidade BRz eSports com base em estatísticas reais de desempenho.
+**BRz Cards** é um projeto da comunidade **BRz eSports** que transforma dados competitivos de players de **Counter-Strike 2** na **FACEIT** em cartas estilo **game card**.
 
-Cada carta combina:
+O objetivo é gerar cartas visuais para os players da comunidade, com atributos calculados a partir de dados reais de performance.
 
-* dados do jogador;
-* estatísticas calculadas a partir das partidas;
-* score geral da carta;
-* foto personalizada do player;
-* bandeira do país;
-* logo BRz;
-* badge FACEIT dinâmica;
-* template visual próprio da comunidade.
+O projeto combina:
 
-A ideia é que cada jogador da comunidade tenha uma carta gerada automaticamente, com identidade visual da BRz e atributos calculados a partir de dados reais.
+- 📊 Coleta de dados via **FACEIT API**
+- 🧮 Cálculo de atributos personalizados
+- 🃏 Geração visual automática das cartas
+- 🏆 Ranking interno da comunidade BRz
+- 🎯 Metodologia própria baseada na **FACEIT Season 8**
 
 ---
 
-## Stack utilizada
+## 🧠 Objetivo
 
-O projeto utiliza:
+O objetivo do BRz Cards não é apenas gerar imagens bonitas.
 
-* Python;
-* ambiente virtual com `venv`;
-* Discord.py;
-* Google BigQuery;
-* dados coletados da Leetify;
-* Steam avatar fallback;
-* assets locais para template, logo, flags, badges FACEIT e fotos dos jogadores;
-* Pillow para composição visual da carta.
+A proposta é criar uma forma visual, divertida e competitiva de representar a performance dos players da comunidade BRz usando dados reais da FACEIT.
+
+Cada carta representa uma leitura estatística do momento atual do player dentro da comunidade.
 
 ---
 
-## Estrutura principal do projeto
+## 🕹️ Fonte dos dados
 
-Estrutura esperada do projeto:
+A principal fonte de dados do projeto é a **FACEIT API**.
 
-```bash
-brz-cards/
-│
-├── assets/
-│   ├── templates/
-│   │   └── brz_card_template.png
-│   │
-│   ├── logos/
-│   │   └── brz_logo.png
-│   │
-│   ├── flags/
-│   │   └── pt.png
-│   │
-│   ├── players/
-│   │   └── brz_johnny.png
-│   │
-│   ├── faceit_levels/
-│   │   ├── 1.png
-│   │   ├── 2.png
-│   │   ├── 3.png
-│   │   ├── 4.png
-│   │   ├── 5.png
-│   │   ├── 6.png
-│   │   ├── 7.png
-│   │   ├── 8.png
-│   │   ├── 9.png
-│   │   └── 10.png
-│   │
-│   └── generated/
-│
-├── src/
-│   ├── bot.py
-│   ├── test_card_generator.py
-│   ├── test_card_generator_layout.py
-│   │
-│   ├── cards/
-│   │   └── card_generator.py
-│   │
-│   ├── collectors/
-│   │   └── collect_leetify_profile.py
-│   │
-│   └── database/
-│       └── bigquery_client.py
-│
-├── .env
-├── .gitignore
-├── requirements.txt
-└── README.md
-```
+Entre os dados utilizados estão:
 
-> Observação: a pasta `assets/generated/` deve existir localmente para armazenar cartas renderizadas, mas deve ser ignorada no Git.
+- 🎯 `K/D Ratio`
+- 🔫 `K/R Ratio`
+- 💥 `ADR`
+- 🧠 `Entry Success Rate`
+- ⚔️ `Entry Rate`
+- 💣 `Utility Success Rate`
+- 🔥 `Utility Damage per Round`
+- 👁️ `Enemies Flashed per Round`
+- 💡 `Flash Success Rate`
+- 🏆 `Win Rate`
+- 🧊 `1v1Count`
+- 🧊 `1v1Wins`
+- 🧊 `1v2Count`
+- 🧊 `1v2Wins`
+- 📈 `FACEIT Level`
+- 🎮 Partidas jogadas na Season 8
+- 🧬 Partidas lifetime na FACEIT
+- 🧬 Maior level FACEIT atingido em lifetime
 
 ---
 
-## Fluxo geral da aplicação
+## 📅 Corte oficial: FACEIT Season 8
 
-O fluxo principal do projeto é:
+A metodologia atual do BRz Cards utiliza como base principal a **Season 8 da FACEIT**, iniciada em:
 
 ```text
-Leetify
-   ↓
-Coleta de dados via collector
-   ↓
-BigQuery
-   ↓
-Tabelas players, player_match_stats e player_card_scores
-   ↓
-Cálculo e atualização de scores
-   ↓
-Geração visual da carta
-   ↓
-Comando /brzcards no Discord
+22/04/2026
 ```
+
+Essa decisão foi tomada para evitar distorções causadas por estatísticas lifetime.
+
+### ❌ Por que não usar lifetime stats para tudo?
+
+Porque lifetime mistura toda a história do player:
+
+- Fases antigas
+- Evolução individual
+- Partidas de quando o player ainda era iniciante
+- Mudanças de nível
+- Estilos de jogo diferentes ao longo do tempo
+- Momentos bons e ruins acumulados no mesmo número
+
+Por isso, os atributos principais da carta são baseados apenas nas partidas jogadas desde o início da Season 8.
+
+A única exceção é o atributo **EXP**, que usa dados lifetime porque representa experiência acumulada.
 
 ---
 
-## Fluxo de dados no BigQuery
+## ✅ Regra mínima de elegibilidade
 
-O projeto usa três tabelas principais.
-
-### `players`
-
-Guarda os dados principais do jogador.
-
-Informações esperadas:
-
-* `player_id`;
-* nickname;
-* Steam ID;
-* país;
-* role;
-* avatar;
-* `faceit_level`;
-* demais metadados do jogador.
-
-O campo `faceit_level` é usado diretamente na renderização da badge FACEIT da carta.
-
----
-
-### `player_match_stats`
-
-Guarda as partidas coletadas da Leetify.
-
-Essa tabela é a fonte para identificar o FACEIT level mais recente do jogador, com base nas partidas FACEIT salvas.
-
-O projeto **não usa FACEIT API neste momento**.
-
-O FACEIT level vem da Leetify e é salvo no BigQuery.
-
----
-
-### `player_card_scores`
-
-Guarda os scores calculados para a carta.
-
-A carta utiliza valores dinâmicos para atributos como:
-
-* AIM;
-* IMP;
-* UTL;
-* CON;
-* CLT;
-* EXP;
-* overall.
-
-Os labels visuais desses atributos já existem no template da carta. O Python desenha apenas os valores calculados.
-
----
-
-## Regra importante sobre FACEIT level
-
-O FACEIT level **não deve ser hardcoded**.
-
-A regra correta é:
+Para receber uma carta ativa, o player precisa ter:
 
 ```text
-Leetify → player_match_stats → players.faceit_level → badge da carta
+Mínimo de 20 partidas na Season 8
 ```
 
-A função responsável por atualizar o FACEIT level do jogador é:
-
-```python
-update_player_faceit_level_from_leetify_matches(player_id)
-```
-
-Essa função deve buscar a partida FACEIT mais recente disponível em `player_match_stats` e atualizar o campo:
+Players com menos de 20 partidas ficam como:
 
 ```text
-players.faceit_level
+INACTIVE
 ```
 
-Para o jogador Johnny, o BigQuery já validou:
+Nesse caso:
 
 ```text
-faceit_level = 9
+AIM = 0
+IMP = 0
+UTL = 0
+CON = 0
+INT = 0
+EXP = 0
+OVERALL = 0
 ```
 
-Portanto, a carta do Johnny deve carregar:
+Além disso, players inativos:
 
-```bash
-assets/faceit_levels/9.png
-```
+- ❌ Não entram no ranking principal
+- ❌ Não participam da normalização dos atributos
+- ❌ Não são usados como referência máxima da pool
+- ❌ Não recebem cálculo competitivo de carta
 
-Caso `faceit_level` venha como `None`, a badge FACEIT não deve ser desenhada.
-
----
-
-## Geração da carta
-
-A geração visual da carta acontece principalmente no arquivo:
-
-```bash
-src/cards/card_generator.py
-```
-
-A função de preview:
-
-```python
-generate_player_card_preview()
-```
-
-não deve ter dados hardcoded. Ela deve chamar:
-
-```python
-generate_player_card("brz_johnny")
-```
-
-A função responsável por montar os dados do jogador deve usar:
-
-```python
-_parse_faceit_level(profile.get("faceit_level"))
-```
-
-Isso garante que a badge FACEIT seja desenhada a partir do valor dinâmico vindo do BigQuery.
-
----
-
-## Prioridade de imagem do jogador
-
-A imagem do jogador deve seguir esta ordem de prioridade:
-
-```text
-1. Foto local do player em assets/players/
-2. Avatar FACEIT, caso exista
-3. Avatar Steam, caso exista
-4. Fallback visual padrão, se necessário
-```
-
-No caso do Johnny, a imagem local deve ter prioridade:
-
-```bash
-assets/players/brz_johnny.png
-```
-
-Isso é importante porque a carta usa uma imagem personalizada no estilo visual da BRz, e não apenas o avatar público do Steam ou FACEIT.
-
----
-
-## Assets visuais
-
-### Template da carta
-
-Arquivo principal:
-
-```bash
-assets/templates/brz_card_template.png
-```
-
-O template original está em:
-
-```text
-800x800 px
-```
-
-Durante a geração, o Python redimensiona para:
-
-```text
-600x600 px
-```
-
-Depois de renderizar os elementos, a carta final recebe um crop lateral:
-
-```text
-40 px de cada lado
-```
-
-Resultado final:
-
-```text
-520x600 px
-```
-
----
-
-## Regra de coordenadas do layout
-
-As coordenadas visuais foram medidas no Figma/Kittl com base em uma carta de:
-
-```text
-600x600 px
-```
-
-Como o desenho acontece antes do crop lateral, é importante lembrar:
-
-```text
-Coordenada medida no resultado final pode precisar de +40 no código.
-```
+Essa regra existe para evitar que players com poucas partidas tenham números artificialmente altos.
 
 Exemplo:
 
-Se um elemento parece estar no `x = 100` na imagem final já cortada, no código ele pode precisar estar em:
+Um player com apenas 3 partidas pode ter um HS%, clutch rate ou ADR muito alto por acaso. Isso não representa uma amostra confiável.
+
+Por isso, a carta competitiva só é calculada a partir de 20 partidas na Season 8.
+
+---
+
+## 🧮 Metodologia de normalização
+
+O BRz Cards usa uma lógica de normalização baseada na própria comunidade.
+
+Em vez de usar uma régua externa ou valores arbitrários, o sistema compara os players ativos entre si.
+
+A regra geral é:
 
 ```text
-x = 140
+score_da_variavel = valor_do_player / maior_valor_da_pool * 100
 ```
 
-Isso acontece porque o crop remove 40 px da esquerda depois que o desenho já foi feito.
+Ou seja:
 
----
+> 🏆 O melhor player da comunidade em cada variável recebe 100.  
+> 📉 Os demais recebem nota proporcional a esse melhor valor.
 
-## Configurações visuais principais
-
-Configuração base:
-
-```python
-CANVAS_SIZE = 600
-```
-
-A carta final é gerada a partir de um canvas 600x600 e depois cortada lateralmente para 520x600.
-
-Exemplo de configuração visual relevante para a logo:
-
-```python
-"logo": {"x": 88, "y": 265, "w": 123, "h": 123}
-```
-
-A logo foi ajustada para aparecer mais baixa no card.
-
----
-
-## Nome, role e stats
-
-Regras visuais atuais:
-
-* o nome do jogador deve aparecer em maiúsculas;
-* o nome não deve ter contorno preto;
-* a role deve aparecer no campo de role;
-* a role não deve ser confundida com o nome;
-* os labels `AIM`, `IMP`, `UTL`, `CON`, `CLT`, `EXP` são estáticos no template;
-* os valores dos atributos são dinâmicos;
-* o overall tem efeito dourado com glow.
-
----
-
-## Badge FACEIT
-
-As badges FACEIT ficam em:
-
-```bash
-assets/faceit_levels/
-```
-
-Com arquivos de:
-
-```bash
-1.png
-2.png
-3.png
-4.png
-5.png
-6.png
-7.png
-8.png
-9.png
-10.png
-```
-
-A lógica esperada é:
-
-```python
-level = _parse_faceit_level(profile.get("faceit_level"))
-```
-
-Se `level` existir:
-
-```python
-badge_path = f"assets/faceit_levels/{level}.png"
-```
-
-Se `level` for `None`, a badge não deve ser desenhada.
-
-A badge deve usar o valor dinâmico salvo em:
+Exemplo:
 
 ```text
-players.faceit_level
+Maior HS% da pool = 70%
+HS% do player = 35%
+
+HS_score = 35 / 70 * 100
+HS_score = 50
 ```
 
----
-
-## Discord bot
-
-O bot principal está em:
-
-```bash
-src/bot.py
-```
-
-O comando esperado é:
-
-```bash
-/brzcards
-```
-
-Esse comando deve gerar uma carta para o jogador solicitado ou, no estado atual do projeto, gerar a carta de teste do Johnny.
-
-Fluxo esperado do comando:
+Com isso, a carta passa a responder:
 
 ```text
-Usuário executa /brzcards
-   ↓
-Bot chama função de geração da carta
-   ↓
-Sistema busca dados do jogador no BigQuery
-   ↓
-Sistema renderiza a carta com assets locais
-   ↓
-Imagem final é enviada no Discord
+Quem é o melhor da comunidade BRz nesse fundamento?
 ```
 
 ---
 
-## Configuração do ambiente local
+## 📦 Normalização de volume
 
-### 1. Clonar o projeto
+Para variáveis de volume, como quantidade de partidas, usamos uma curva diferente:
 
-```bash
-git clone <url-do-repositorio>
-cd brz-cards
+```text
+volume_score = (valor_do_player / maior_valor_da_pool) ^ 0.65 * 100
 ```
 
-Ou, se o projeto já estiver localmente:
+Isso evita que o volume seja excessivamente punitivo.
 
-```bash
-cd C:\dev\brz-cards
+Exemplo:
+
+```text
+Player com mais partidas = 180
+Player analisado = 70
+
+volume_score = (70 / 180) ^ 0.65 * 100
+volume_score ≈ 54
+```
+
+Essa lógica valoriza quem joga mais, mas sem destruir completamente quem tem um volume menor, porém ainda relevante.
+
+---
+
+## 🃏 Atributos da carta
+
+Cada carta possui 6 atributos principais:
+
+| Stat | Nome | Significado |
+|---|---|---|
+| 🎯 AIM | Aim | Mira e eficiência individual |
+| 💥 IMP | Impact | Impacto ofensivo |
+| 💣 UTL | Utility | Uso de utilitários |
+| 📊 CON | Consistency | Consistência na Season 8 |
+| 🧠 INT | Intelligence | Clutch, decisão e leitura |
+| 🧬 EXP | Experience | Experiência FACEIT |
+
+---
+
+## 🎯 AIM — Mira e eficiência individual
+
+O atributo **AIM** mede a eficiência mecânica do player.
+
+Ele responde perguntas como:
+
+- O player mata bem?
+- O player causa dano?
+- O player tem boa eficiência individual?
+- O player mantém boa relação entre kill, morte e dano?
+
+### Variáveis usadas
+
+```text
+K/D Ratio
+K/R Ratio
+ADR
+Headshots %
+```
+
+### Fórmula
+
+```text
+AIM =
+35% K/D Ratio
+25% K/R Ratio
+25% ADR
+15% Headshots %
+```
+
+### Motivação
+
+**K/D Ratio** mede eficiência entre kills e mortes.
+
+**K/R Ratio** mede frequência de kills por round.
+
+**ADR** mede dano médio por round.
+
+**Headshots %** mede precisão, mas não domina a nota.
+
+HS% tem peso menor porque um player pode ter muito headshot, mas pouco impacto real no jogo.
+
+---
+
+## 💥 IMP — Impacto ofensivo
+
+O atributo **IMP** mede o quanto o player influencia diretamente o round.
+
+Ele responde perguntas como:
+
+- O player cria vantagem?
+- O player causa dano relevante?
+- O player participa bem de entradas?
+- O player gera impacto ofensivo?
+
+### Variáveis usadas
+
+```text
+ADR
+K/R Ratio
+Entry Success Rate
+Entry Rate
+Clutch Impact
+```
+
+### Fórmula
+
+```text
+IMP =
+30% ADR
+25% K/R Ratio
+20% Entry Success Rate
+15% Entry Rate
+10% Clutch Impact
+```
+
+### Motivação
+
+**ADR** mede dano.
+
+**K/R Ratio** mede kill por round.
+
+**Entry Success Rate** mede sucesso em situações de abertura.
+
+**Entry Rate** mede envolvimento em tentativas de entrada.
+
+**Clutch Impact** entra com peso menor porque clutch também muda rounds, mas seu peso principal fica em INT.
+
+---
+
+## 💣 UTL — Utilitários
+
+O atributo **UTL** mede a contribuição do player com utilitários.
+
+Ele responde perguntas como:
+
+- O player usa bem granadas?
+- O player consegue flashar inimigos?
+- O player gera dano com utilitários?
+- O player ajuda o time taticamente?
+
+### Variáveis usadas
+
+```text
+Utility Success Rate
+Utility Damage per Round
+Enemies Flashed per Round
+Flash Success Rate
+Utility Usage per Round
+Flashes per Round
+```
+
+### Fórmula
+
+```text
+UTL =
+25% Utility Success Rate
+20% Utility Damage per Round
+20% Enemies Flashed per Round
+15% Flash Success Rate
+10% Utility Usage per Round
+10% Flashes per Round
+```
+
+### Motivação
+
+**Utility Success Rate** mede eficiência geral dos utilitários.
+
+**Utility Damage per Round** mede dano causado por granadas.
+
+**Enemies Flashed per Round** mede impacto das flashes.
+
+**Flash Success Rate** mede qualidade das flashes.
+
+**Utility Usage per Round** mede frequência de uso.
+
+**Flashes per Round** mede participação com flashbangs.
+
+UTL é importante, mas tem peso controlado no OVERALL porque a API não captura todo o contexto tático de uma rodada.
+
+---
+
+## 📊 CON — Consistência na Season 8
+
+O atributo **CON** mede a consistência do player na Season 8.
+
+Ele responde perguntas como:
+
+- O player jogou bastante?
+- O player sustentou performance?
+- O player converteu números em resultado?
+- O player tem volume confiável?
+
+### Variáveis usadas
+
+```text
+Quantidade de partidas na Season 8
+K/D Ratio
+K/R Ratio
+Win Rate
+```
+
+### Fórmula
+
+```text
+CON =
+65% volume de partidas na Season 8
+35% performance consistency
+```
+
+A parte de performance consistency é:
+
+```text
+Performance Consistency =
+40% K/D Ratio
+30% K/R Ratio
+30% Win Rate
+```
+
+### Volume de partidas
+
+```text
+matches_score = (partidas_do_player / maior_numero_de_partidas_da_pool) ^ 0.65 * 100
+```
+
+### Motivação
+
+A Season 8 é o corte oficial da carta.
+
+Por isso, quem joga mais partidas dentro desse período precisa ser valorizado.
+
+Mas CON não é só volume.
+
+Também entram KD, KR e Win Rate para medir se o player sustentou performance e converteu jogo.
+
+---
+
+## 🧠 INT — Inteligência, clutch e decisão
+
+O atributo **INT** mede decisão sob pressão, clutch e leitura de jogo.
+
+Ele responde perguntas como:
+
+- O player decide bem em momentos críticos?
+- O player ganha clutch?
+- O player entra com qualidade?
+- O player usa utilitário de forma inteligente?
+
+### Variáveis usadas
+
+```text
+Clutch Score
+Entry Success Rate
+Utility Success Rate
+```
+
+### Fórmula
+
+```text
+INT =
+70% Clutch Score
+15% Entry Success Rate
+15% Utility Success Rate
+```
+
+### Clutch Score
+
+A FACEIT fornece dados como:
+
+```text
+1v1Count
+1v1Wins
+1v2Count
+1v2Wins
+```
+
+Com isso, calculamos:
+
+```text
+1v1 Win Rate = 1v1Wins / 1v1Count
+1v2 Win Rate = 1v2Wins / 1v2Count
+Clutch Volume = 1v1Count + 1v2Count
+```
+
+A fórmula do Clutch Score é:
+
+```text
+Clutch Score =
+50% 1v1 Win Rate
+30% 1v2 Win Rate
+20% Clutch Volume
+```
+
+### Motivação
+
+Clutch tem peso alto em INT porque representa:
+
+- 🧊 Calma
+- 🧠 Leitura
+- ⏱️ Noção de tempo
+- 🎯 Escolha de duelo
+- 🧍 Posicionamento
+- 🏆 Decisão sob pressão
+
+INT não é sobre matar muito. Para isso já existem AIM e IMP.
+
+INT representa a capacidade de decidir bem em momentos importantes.
+
+---
+
+## 🧬 EXP — Experiência FACEIT
+
+O atributo **EXP** mede experiência acumulada, liderança e bagagem competitiva.
+
+Ele responde perguntas como:
+
+- O player tem histórico na FACEIT?
+- O player já chegou em nível alto?
+- O player tem rodagem competitiva?
+- O player tem bagagem suficiente para ser considerado experiente?
+
+### Variáveis usadas
+
+```text
+Maior level FACEIT atingido em lifetime
+Quantidade total de jogos FACEIT em lifetime
+```
+
+### Fórmula
+
+```text
+EXP =
+40% maior level FACEIT lifetime
+60% quantidade de jogos FACEIT lifetime
+```
+
+### Motivação
+
+EXP é o único atributo que usa dados lifetime, porque experiência é naturalmente histórica.
+
+**Maior level FACEIT lifetime** mostra o teto competitivo que o player já alcançou.
+
+**Quantidade total de jogos FACEIT lifetime** mostra rodagem, bagagem e experiência acumulada.
+
+EXP não usa Win Rate porque Win Rate já entra em CON.
+
+EXP não usa performance atual porque isso já aparece em AIM, IMP, UTL, CON e INT.
+
+Mesmo assim, EXP só é calculado se o player tiver pelo menos 20 partidas na Season 8.
+
+---
+
+## 🏆 OVERALL
+
+O **OVERALL** é a nota geral da carta.
+
+Ele representa a força geral do player dentro da metodologia BRz Cards.
+
+### Fórmula base
+
+```text
+BASE_OVERALL =
+25% AIM
+25% IMP
+10% UTL
+18% CON
+12% INT
+10% EXP
+```
+
+### Multiplicador de FACEIT Level
+
+Depois da fórmula base, aplicamos um multiplicador baseado no FACEIT Level atual.
+
+```text
+OVERALL = BASE_OVERALL * multiplicador_de_level
+```
+
+Tabela de multiplicador:
+
+| FACEIT Level | Multiplicador |
+|---|---:|
+| Level 1 | 0.78 |
+| Level 2 | 0.81 |
+| Level 3 | 0.84 |
+| Level 4 | 0.87 |
+| Level 5 | 0.90 |
+| Level 6 | 0.94 |
+| Level 7 | 0.98 |
+| Level 8 | 1.02 |
+| Level 9 | 1.06 |
+| Level 10 | 1.10 |
+
+### Por que o level entra no OVERALL?
+
+Porque o contexto competitivo importa.
+
+Um player Level 10 joga contra adversários mais fortes do que um player Level 5.
+
+Então, se dois players têm números parecidos, mas um performa em lobbies mais difíceis, isso precisa ser refletido na nota geral da carta.
+
+Importante:
+
+```text
+O multiplicador de level não altera AIM, IMP, UTL, CON, INT ou EXP.
+Ele afeta apenas o OVERALL final.
 ```
 
 ---
 
-### 2. Criar ambiente virtual
+## 🧩 Roles
+
+As roles da carta são definidas manualmente.
+
+Exemplos:
+
+```text
+AWPER
+ENTRY
+SUPPORT
+IGL
+LURKER
+CLUTCHER
+RIFLER
+```
+
+### Por que a role é manual?
+
+Porque a FACEIT API não sabe o contexto real da comunidade.
+
+Ela não sabe se um player:
+
+- Joga de entry por função real
+- Pega AWP sempre ou só ocasionalmente
+- Chama round
+- Lurka por estilo
+- Joga suporte
+- Segura bomb
+- Faz trade
+- Joga para o time
+
+Por isso, a role é tratada como identidade da carta, não como cálculo estatístico.
+
+```text
+Role = identidade visual / estilo do player
+Stats = cálculo de performance
+OVERALL = força geral da carta
+```
+
+A role não entra no cálculo do OVERALL.
+
+---
+
+## 📁 Estrutura principal do projeto
+
+```text
+brz-cards/
+│
+├── assets/
+│   └── generated/
+│       └── cartas geradas
+│
+├── data/
+│   ├── brz_faceit_players_enriched.csv
+│   ├── brz_faceit_season8_match_ids.csv
+│   ├── brz_faceit_season8_stats.csv
+│   └── brz_card_scores_v2.csv
+│
+├── src/
+│   ├── collectors/
+│   │   ├── export_faceit_season8_match_ids.py
+│   │   └── export_faceit_season8_stats.py
+│   │
+│   └── scoring/
+│       └── calculate_brz_card_scores_v2.py
+│
+└── README.md
+```
+
+---
+
+## 🔐 Variáveis de ambiente
+
+Para coletar dados da FACEIT API, é necessário configurar a chave da API:
+
+```bash
+FACEIT_API_KEY=sua_chave_aqui
+```
 
 No Windows PowerShell:
 
 ```powershell
-python -m venv .venv
-```
-
-Ativar o ambiente:
-
-```powershell
-.\.venv\Scripts\Activate.ps1
+$env:FACEIT_API_KEY="sua_chave_aqui"
 ```
 
 ---
+
+## ⚙️ Como executar o projeto
+
+### 1. Criar ambiente virtual
+
+```bash
+python -m venv venv
+```
+
+### 2. Ativar ambiente virtual
+
+Windows PowerShell:
+
+```powershell
+.\venv\Scripts\Activate.ps1
+```
+
+Windows CMD:
+
+```cmd
+venv\Scripts\activate
+```
 
 ### 3. Instalar dependências
 
-```powershell
+```bash
 pip install -r requirements.txt
 ```
 
-Caso ainda não exista um `requirements.txt`, gerar um a partir do ambiente atual:
+---
 
-```powershell
-pip freeze > requirements.txt
+## 📥 Coleta de partidas da Season 8
+
+O primeiro passo é coletar os IDs das partidas da Season 8.
+
+Script:
+
+```text
+src/collectors/export_faceit_season8_match_ids.py
+```
+
+Execução:
+
+```bash
+python src/collectors/export_faceit_season8_match_ids.py
+```
+
+Output:
+
+```text
+data/brz_faceit_season8_match_ids.csv
+```
+
+Esse arquivo contém as partidas encontradas para os players da comunidade desde 22/04/2026.
+
+---
+
+## 📊 Coleta de stats da Season 8
+
+Depois de coletar os match IDs, o próximo passo é buscar os stats das partidas.
+
+Script:
+
+```text
+src/collectors/export_faceit_season8_stats.py
+```
+
+Execução:
+
+```bash
+python src/collectors/export_faceit_season8_stats.py
+```
+
+Output:
+
+```text
+data/brz_faceit_season8_stats.csv
+```
+
+Esse arquivo agrega os dados por player.
+
+O script também usa cache local para evitar chamadas desnecessárias à API:
+
+```text
+data/cache/faceit_match_stats/
 ```
 
 ---
 
-## Variáveis de ambiente
+## 🧮 Cálculo dos scores
 
-O projeto deve usar um arquivo `.env` local.
+O cálculo principal das cartas fica em:
 
-Exemplo de variáveis possíveis:
-
-```env
-DISCORD_TOKEN=seu_token_do_discord
-GOOGLE_APPLICATION_CREDENTIALS=caminho/para/credencial.json
-BIGQUERY_PROJECT_ID=seu_project_id
-BIGQUERY_DATASET=seu_dataset
+```text
+src/scoring/calculate_brz_card_scores_v2.py
 ```
 
-O arquivo `.env` **nunca deve ser versionado no Git**.
-
-Para ajudar outros desenvolvedores, pode existir um arquivo seguro:
+Execução:
 
 ```bash
-.env.example
+python src/scoring/calculate_brz_card_scores_v2.py
 ```
 
-Exemplo:
+Output:
 
-```env
-DISCORD_TOKEN=
-GOOGLE_APPLICATION_CREDENTIALS=
-BIGQUERY_PROJECT_ID=
-BIGQUERY_DATASET=
+```text
+data/brz_card_scores_v2.csv
+```
+
+Esse arquivo contém os atributos finais de cada player:
+
+```text
+AIM
+IMP
+UTL
+CON
+INT
+EXP
+OVERALL
+STATUS
+ROLE
 ```
 
 ---
 
-## Arquivos que não devem ir para o Git
+## 🃏 Geração das cartas
 
-O `.gitignore` deve proteger arquivos sensíveis, ambientes locais e arquivos gerados.
+As cartas geradas ficam em:
 
-Sugestão de `.gitignore`:
-
-```gitignore
-# Python
-__pycache__/
-*.py[cod]
-*.pyo
-*.pyd
-
-# Virtual environment
-.venv/
-venv/
-
-# Environment / secrets
-.env
-.env.*
-!.env.example
-
-# Generated cards
-assets/generated/
-
-# Local credentials
-credentials/
-*.key.json
-*service-account*.json
-```
-
----
-
-## Arquivos que podem ser versionados
-
-Estes assets fazem parte da identidade visual do projeto e podem ser versionados:
-
-```bash
-assets/templates/
-assets/logos/
-assets/flags/
-assets/faceit_levels/
-```
-
-A pasta abaixo também pode ser versionada, desde que o repositório seja privado ou que exista autorização para uso das imagens:
-
-```bash
-assets/players/
-```
-
-Caso o repositório seja público, é recomendável avaliar com cuidado antes de versionar fotos reais dos jogadores.
-
----
-
-## Testes locais
-
-O projeto possui arquivos de teste para geração da carta:
-
-```bash
-src/test_card_generator.py
-src/test_card_generator_layout.py
-```
-
-Para testar a geração da carta:
-
-```powershell
-python src/test_card_generator.py
-```
-
-Para testar ajustes visuais de layout:
-
-```powershell
-python src/test_card_generator_layout.py
-```
-
-A carta gerada deve ser salva em:
-
-```bash
+```text
 assets/generated/
 ```
 
-Como essa pasta é ignorada no Git, as imagens geradas localmente não entram no repositório.
-
----
-
-## Checklist antes do commit
-
-Antes de fazer commit, executar:
-
-```powershell
-git status --short
-```
-
-Verificar se `.env`, `.venv` e `assets/generated/` não aparecem como arquivos para commit.
-
-Também é recomendado conferir se algum arquivo sensível já está rastreado:
-
-```powershell
-git ls-files .env
-git ls-files .venv
-git ls-files venv
-git ls-files assets/generated
-```
-
-Se algum deles aparecer, remover do Git sem apagar localmente:
-
-```powershell
-git rm -r --cached --ignore-unmatch .env .venv venv assets/generated
-```
-
-Depois conferir novamente:
-
-```powershell
-git status --short
-```
-
----
-
-## Staging recomendado
-
-Evitar `git add .` sem revisar.
-
-Adicionar de forma controlada:
-
-```powershell
-git add .gitignore
-git add README.md
-git add requirements.txt
-git add src
-git add assets/templates
-git add assets/logos
-git add assets/flags
-git add assets/faceit_levels
-git add assets/players
-```
-
-Conferir o que será commitado:
-
-```powershell
-git diff --cached --name-only
-```
-
-Não deve aparecer:
+Cada carta é criada visualmente a partir dos dados calculados no arquivo:
 
 ```text
-.env
-.venv/
-venv/
-assets/generated/
-credentials/
-service-account json
+data/brz_card_scores_v2.csv
 ```
 
 ---
 
-## Commit sugerido
+## 🧪 Status atual
 
-Para o marco atual do projeto:
+O projeto está em desenvolvimento ativo.
 
-```powershell
-git commit -m "feat: generate BRz player cards with dynamic FACEIT level"
-```
+Principais decisões já tomadas:
 
-Esse commit representa:
-
-* geração visual da carta BRz;
-* uso de template próprio;
-* uso de foto local do jogador;
-* fallback para avatar externo;
-* badge FACEIT dinâmica;
-* integração com BigQuery;
-* scores dinâmicos;
-* layout ajustado com crop final.
+- ✅ Season 8 como corte oficial
+- ✅ Mínimo de 20 partidas para carta ativa
+- ✅ Normalização pela própria comunidade BRz
+- ✅ Remoção de lifetime stats dos atributos de performance
+- ✅ EXP usando apenas lifetime level máximo e lifetime matches
+- ✅ Role definida manualmente
+- ✅ Role fora do cálculo do OVERALL
+- ✅ FACEIT Level atual como multiplicador do OVERALL
+- ✅ Players inativos com stats e OVERALL zerados
 
 ---
 
-## Estado atual do projeto
+## 🚧 Próximos passos
 
-O estado atual validado é:
-
-* a carta é gerada a partir do template visual da BRz;
-* o template original 800x800 é redimensionado para 600x600;
-* a imagem final recebe crop lateral de 40 px de cada lado;
-* a foto local do Johnny tem prioridade sobre avatares externos;
-* o `faceit_level` vem do BigQuery;
-* o FACEIT level do Johnny já foi validado como `9`;
-* a badge FACEIT deve carregar `assets/faceit_levels/9.png`;
-* o nome do jogador aparece em maiúsculas;
-* a role aparece no campo correto;
-* os labels dos atributos são estáticos no template;
-* os valores dos atributos são dinâmicos;
-* o overall tem efeito dourado com glow.
+- [ ] Implementar a nova metodologia no `calculate_brz_card_scores_v2.py`
+- [ ] Ajustar cálculo de `INT`
+- [ ] Ajustar cálculo de `EXP`
+- [ ] Aplicar regra de `INACTIVE`
+- [ ] Garantir que players inativos não participem da normalização
+- [ ] Recalcular `brz_card_scores_v2.csv`
+- [ ] Gerar novas cartas
+- [ ] Validar visualmente os resultados
+- [ ] Ajustar layout final das cartas
+- [ ] Publicar ranking oficial
 
 ---
 
-## Próximos passos recomendados
+## 🏁 Filosofia do projeto
 
-### 1. Congelar o layout atual
+O BRz Cards não tenta dizer quem é “bom” ou “ruim” de forma absoluta.
 
-Antes de adicionar novas features, é importante considerar o layout atual como uma versão base estável.
+A carta é uma leitura estatística e visual da performance do player dentro da comunidade BRz, usando dados da FACEIT e uma metodologia transparente.
 
-Isso evita que ajustes de lógica quebrem o visual já aprovado.
-
----
-
-### 2. Validar o FACEIT level dinâmico
-
-Criar ou manter um teste simples garantindo que:
+A régua principal é:
 
 ```text
-players.faceit_level = 9
+Comparação entre players ativos da comunidade na Season 8
 ```
 
-carrega:
+O objetivo é criar algo divertido, competitivo, visualmente forte e minimamente justo.
 
-```bash
-assets/faceit_levels/9.png
-```
+---
 
-E que:
+## 👑 BRz eSports
+
+Projeto criado para a comunidade **BRz eSports**.
+
+Feito para transformar dados, rivalidade saudável e resenha em cartas competitivas.
 
 ```text
-players.faceit_level = None
+GG.
 ```
-
-não desenha nenhuma badge.
-
----
-
-### 3. Validar o comando no Discord
-
-Testar o fluxo real:
-
-```bash
-/brzcards
-```
-
-Verificar:
-
-* se o bot responde corretamente;
-* se a imagem é gerada;
-* se a carta é enviada no canal;
-* se o arquivo temporário não causa conflito;
-* se o bot funciona com o ambiente virtual ativo.
-
----
-
-### 4. Adicionar suporte para múltiplos jogadores
-
-Depois que a carta do Johnny estiver estável, o próximo passo é permitir que o comando gere cartas para outros jogadores.
-
-Exemplo futuro:
-
-```bash
-/brzcards player:brz_johnny
-/brzcards player:outro_player
-```
-
-Ou:
-
-```bash
-/brzcards steam_id:<steam_id>
-```
-
----
-
-### 5. Melhorar tratamento de erro
-
-Adicionar mensagens amigáveis para casos como:
-
-* jogador não encontrado;
-* jogador sem partidas suficientes;
-* jogador sem score calculado;
-* jogador sem foto local;
-* falha ao acessar BigQuery;
-* badge FACEIT inexistente;
-* erro ao renderizar imagem.
-
----
-
-### 6. Criar cache de cartas geradas
-
-No futuro, pode ser interessante gerar cache para evitar renderização repetida.
-
-Exemplo:
-
-```text
-Se os dados do jogador não mudaram desde a última geração, reutilizar a carta existente.
-```
-
-Isso pode reduzir custo, tempo de resposta e uso de recursos.
-
----
-
-### 7. Criar ranking ou coleção de cards
-
-Depois da geração individual estar estável, o projeto pode evoluir para:
-
-* ranking geral da comunidade;
-* ranking por AIM, IMP, UTL, CON, CLT e EXP;
-* comparação entre jogadores;
-* histórico de evolução da carta;
-* cartas por temporada;
-* carta especial para eventos internos.
-
----
-
-## Cuidados importantes
-
-### Não hardcodar dados do jogador
-
-Evitar deixar informações fixas dentro do `card_generator.py`, como:
-
-```python
-faceit_level = 9
-nickname = "JOHNNY"
-```
-
-Essas informações devem vir do BigQuery ou de uma camada de dados centralizada.
-
----
-
-### Não integrar FACEIT API agora
-
-A integração com FACEIT API não faz parte da etapa atual.
-
-O FACEIT level deve continuar vindo da Leetify via BigQuery.
-
-Regra atual:
-
-```text
-Não usar FACEIT API.
-Não hardcodar FACEIT level.
-Usar players.faceit_level.
-```
-
----
-
-### Cuidado com coordenadas após o crop
-
-Como o desenho ocorre antes do crop lateral, qualquer ajuste horizontal precisa considerar a diferença de 40 px.
-
-Regra prática:
-
-```text
-Elemento medido na imagem final → somar 40 px no código.
-```
-
----
-
-### Cuidado com assets pessoais
-
-Fotos de jogadores podem ser dados pessoais.
-
-Se o repositório for privado, versionar `assets/players/` pode ser aceitável.
-
-Se o repositório for público, é melhor avaliar se essas fotos devem ficar fora do Git ou ser substituídas por imagens genéricas.
-
----
-
-## Troubleshooting
-
-### A badge FACEIT não aparece
-
-Verificar:
-
-* se `players.faceit_level` está preenchido no BigQuery;
-* se `_parse_faceit_level()` está retornando um número válido;
-* se o arquivo existe em `assets/faceit_levels/{level}.png`;
-* se o valor não está vindo como `None`;
-* se o caminho relativo está correto ao executar o script.
-
----
-
-### A carta aparece cortada ou desalinhada
-
-Verificar:
-
-* se o template foi redimensionado para 600x600;
-* se o crop lateral está removendo 40 px de cada lado;
-* se as coordenadas foram medidas no card final ou no canvas antes do crop;
-* se o elemento precisa de `+40` no eixo X.
-
----
-
-### A foto do player não aparece
-
-Verificar:
-
-* se o arquivo existe em `assets/players/`;
-* se o nome do arquivo bate com o `player_id` ou slug esperado;
-* se a função de busca de imagem local roda antes do fallback Steam/FACEIT;
-* se o arquivo está em formato compatível, como PNG.
-
----
-
-### O bot não responde no Discord
-
-Verificar:
-
-* se o token está no `.env`;
-* se o ambiente virtual está ativo;
-* se as dependências estão instaladas;
-* se o bot foi convidado com permissões corretas;
-* se o comando slash foi sincronizado;
-* se não há erro no terminal ao iniciar `src/bot.py`.
-
----
-
-### Erro ao acessar o BigQuery
-
-Verificar:
-
-* se a credencial do Google está configurada;
-* se `GOOGLE_APPLICATION_CREDENTIALS` aponta para o arquivo correto;
-* se a service account tem permissão no projeto;
-* se o dataset e as tabelas existem;
-* se o nome do projeto está correto no `.env`.
-
----
-
-## Convenções do projeto
-
-Recomendações para manter o projeto organizado:
-
-* manter lógica de dados separada da lógica visual;
-* evitar dados hardcoded no gerador de cartas;
-* centralizar acesso ao BigQuery em `bigquery_client.py`;
-* manter assets visuais organizados por categoria;
-* salvar imagens geradas apenas em `assets/generated/`;
-* manter `assets/generated/` fora do Git;
-* testar visualmente a carta antes de alterar o layout;
-* fazer commits pequenos e descritivos.
-
----
-
-## Roadmap sugerido
-
-### Versão 0.1
-
-* gerar carta do Johnny localmente;
-* carregar dados dinâmicos do BigQuery;
-* renderizar FACEIT level dinâmico;
-* estabilizar layout visual;
-* enviar carta via Discord.
-
-### Versão 0.2
-
-* suportar múltiplos jogadores;
-* permitir escolha do jogador no comando `/brzcards`;
-* melhorar mensagens de erro;
-* validar ausência de dados;
-* organizar cache local.
-
-### Versão 0.3
-
-* adicionar ranking da comunidade;
-* criar comandos de comparação;
-* adicionar histórico por temporada;
-* melhorar design das cartas;
-* criar cards especiais.
-
----
-
-## Resumo técnico
-
-O **BRz Cards** é um bot Discord que transforma dados reais de performance da comunidade BRz eSports em cartas visuais personalizadas.
-
-A regra central do projeto é manter a carta dinâmica e baseada no BigQuery, sem hardcodar informações relevantes.
-
-O FACEIT level, em especial, deve seguir o fluxo:
-
-```text
-Leetify → BigQuery → players.faceit_level → assets/faceit_levels/{level}.png
-```
-
-A etapa atual é consolidar a geração da carta do Johnny, garantir que o commit está seguro e, em seguida, evoluir para múltiplos jogadores e comandos mais completos no Discord.
