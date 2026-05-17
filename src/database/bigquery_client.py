@@ -694,9 +694,11 @@ def update_player_steam_profile(
 def get_player_profile(player_id: str) -> dict | None:
     """
     Get player profile fields needed to render the BRz card.
+    Falls back to players_enriched if not found in players table.
     """
     client = get_bigquery_client()
 
+    # Try main players table first
     query = f"""
         SELECT
           player_id,
@@ -720,11 +722,39 @@ def get_player_profile(player_id: str) -> dict | None:
 
     rows = list(client.query(query, job_config=job_config).result())
 
-    if not rows:
+    if rows:
+        row = rows[0]
+        return {
+            "player_id": row["player_id"],
+            "display_name": row["display_name"],
+            "country_code": row["country_code"],
+            "photo_path": row["photo_path"],
+            "faceit_avatar_url": row["faceit_avatar_url"],
+            "steam_avatar_url": row["steam_avatar_url"],
+            "faceit_level": row["faceit_level"],
+        }
+
+    # Fallback to players_enriched table
+    query_enriched = f"""
+        SELECT
+          faceit_nickname_official AS player_id,
+          faceit_nickname_official AS display_name,
+          country AS country_code,
+          CAST(NULL AS STRING) AS photo_path,
+          avatar AS faceit_avatar_url,
+          CAST(NULL AS STRING) AS steam_avatar_url,
+          cs2_skill_level AS faceit_level
+        FROM `{PROJECT_ID}.{DATASET_ID}.players_enriched`
+        WHERE faceit_player_id = @player_id OR LOWER(faceit_nickname_official) = LOWER(@player_id)
+        LIMIT 1
+    """
+
+    rows_enriched = list(client.query(query_enriched, job_config=job_config).result())
+
+    if not rows_enriched:
         return None
 
-    row = rows[0]
-
+    row = rows_enriched[0]
     return {
         "player_id": row["player_id"],
         "display_name": row["display_name"],
