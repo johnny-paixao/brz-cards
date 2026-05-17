@@ -1,0 +1,46 @@
+name: BRz Cards — Daily BigQuery Upload
+
+on:
+  # Roda todo dia as 05:00 UTC (02:00 horario de Brasilia)
+  schedule:
+    - cron: "0 5 * * *"
+
+  # Permite rodar manualmente pelo GitHub UI (Actions > Run workflow)
+  workflow_dispatch:
+    inputs:
+      season:
+        description: "Temporada (ex: season8, season9)"
+        required: false
+        default: "season8"
+
+jobs:
+  upload-to-bigquery:
+    name: Upload CSVs to BigQuery
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Run BigQuery upload
+        env:
+          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+          BQ_DATASET_ID: ${{ secrets.BQ_DATASET_ID }}
+          FACEIT_API_KEY: ${{ secrets.FACEIT_API_KEY }}
+        run: |
+          SEASON="${{ github.event.inputs.season || 'season8' }}"
+          python src/bigquery/upload_brz_cards_to_bq.py --season "$SEASON"
