@@ -52,7 +52,7 @@ BOXES = {
     "utl": {"x": 229, "y": 482, "w": 41, "h": 33},
 
     "con": {"x": 410, "y": 414, "w": 41, "h": 33},
-    "clt": {"x": 410, "y": 448, "w": 41, "h": 33},
+    "int": {"x": 410, "y": 448, "w": 41, "h": 33},
     "exp": {"x": 410, "y": 482, "w": 41, "h": 33},
 }
 
@@ -643,7 +643,7 @@ def _build_player_data(profile: dict, card_data: dict) -> dict:
         "imp": card_data.get("impact") or 0,
         "utl": card_data.get("utility") or 0,
         "con": card_data.get("consistency") or 0,
-        "clt": card_data.get("clutch") or 0,
+        "int": card_data.get("intelligence") or card_data.get("clutch") or 0,
         "exp": card_data.get("experience") or 0,
     }
 
@@ -663,7 +663,7 @@ def _build_player_data_from_v2_csv(row: dict) -> dict:
         "imp": _safe_int_from_score(row.get("IMP")),
         "utl": _safe_int_from_score(row.get("UTL")),
         "con": _safe_int_from_score(row.get("CON")),
-        "clt": _safe_int_from_score(row.get("CLT")),
+        "int": _safe_int_from_score(row.get("INT")),
         "exp": _safe_int_from_score(row.get("EXP")),
     }
 
@@ -750,7 +750,7 @@ def _render_card(
         "min_size": 14,
     }
 
-    for stat_key in ["aim", "imp", "utl", "con", "clt", "exp"]:
+    for stat_key in ["aim", "imp", "utl", "con", "int", "exp"]:
         _draw_centered_text(
             draw=draw,
             text=str(player_data[stat_key]),

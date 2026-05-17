@@ -28,23 +28,23 @@ def get_latest_player_card(display_name: str) -> dict | None:
 
     query = f"""
         SELECT
-          player_id,
-          display_name,
-          overall_brz,
-          aim,
-          impact,
-          utility,
-          consistency,
-          clutch,
-          experience,
+          faceit_player_id AS player_id,
+          faceit_nickname AS display_name,
+          OVERALL AS overall_brz,
+          AIM AS aim,
+          IMP AS impact,
+          UTL AS utility,
+          CON AS consistency,
+          INT AS intelligence,
+          EXP AS experience,
           role,
-          tier,
-          matches_analyzed,
-          score_version,
-          calculated_at
-        FROM `{PROJECT_ID}.{DATASET_ID}.player_card_scores`
-        WHERE LOWER(display_name) = LOWER(@display_name)
-        ORDER BY calculated_at DESC
+          'Unknown' AS tier,
+          season8_matches AS matches_analyzed,
+          'v2' AS score_version,
+          uploaded_at AS calculated_at
+        FROM `{PROJECT_ID}.{DATASET_ID}.card_scores`
+        WHERE LOWER(faceit_nickname) = LOWER(@display_name)
+        ORDER BY uploaded_at DESC
         LIMIT 1
     """
 
@@ -71,7 +71,7 @@ def get_latest_player_card(display_name: str) -> dict | None:
         "impact": row.impact,
         "utility": row.utility,
         "consistency": row.consistency,
-        "clutch": row.clutch,
+        "intelligence": row.intelligence,
         "experience": row.experience,
         "role": row.role,
         "tier": row.tier,
@@ -79,6 +79,76 @@ def get_latest_player_card(display_name: str) -> dict | None:
         "score_version": row.score_version,
         "calculated_at": row.calculated_at,
     }
+
+
+def get_all_card_players() -> list[dict]:
+    """
+    Get a list of all players and their overall scores from the latest upload.
+    """
+    client = get_bigquery_client()
+
+    query = f"""
+        SELECT
+          faceit_nickname,
+          status,
+          OVERALL as overall
+        FROM `{PROJECT_ID}.{DATASET_ID}.card_scores`
+        WHERE 1=1
+        QUALIFY ROW_NUMBER() OVER (PARTITION BY faceit_nickname ORDER BY uploaded_at DESC) = 1
+        ORDER BY
+          CASE WHEN status = 'ACTIVE' THEN 0 ELSE 1 END ASC,
+          OVERALL DESC,
+          LOWER(faceit_nickname) ASC
+    """
+
+    job_config = bigquery.QueryJobConfig(
+        maximum_bytes_billed=20 * 1024 * 1024,
+    )
+
+    query_job = client.query(query, job_config=job_config)
+    
+    return [
+        {
+            "faceit_nickname": row.faceit_nickname,
+            "status": row.status,
+            "overall": row.overall,
+        }
+        for row in query_job.result()
+    ]
+
+
+def get_ranking_players() -> list[dict]:
+    """
+    Get a list of all ACTIVE players for the ranking, sorted by overall and matches.
+    """
+    client = get_bigquery_client()
+
+    query = f"""
+        SELECT
+          faceit_nickname,
+          role,
+          OVERALL as overall,
+          season8_matches,
+          current_faceit_level,
+          AIM,
+          IMP,
+          UTL,
+          CON,
+          INT as intelligence,
+          EXP
+        FROM `{PROJECT_ID}.{DATASET_ID}.card_scores`
+        WHERE status = 'ACTIVE'
+        QUALIFY ROW_NUMBER() OVER (PARTITION BY faceit_nickname ORDER BY uploaded_at DESC) = 1
+        ORDER BY OVERALL DESC, season8_matches DESC
+    """
+
+    job_config = bigquery.QueryJobConfig(
+        maximum_bytes_billed=20 * 1024 * 1024,
+    )
+
+    query_job = client.query(query, job_config=job_config)
+    
+    return [dict(row.items()) for row in query_job.result()]
 
 
 def get_active_players_with_steam64() -> list[dict]:
@@ -673,23 +743,23 @@ def get_latest_player_card_by_player_id(player_id: str) -> dict | None:
 
     query = f"""
         SELECT
-          player_id,
-          display_name,
-          overall_brz,
-          aim,
-          impact,
-          utility,
-          consistency,
-          clutch,
-          experience,
+          faceit_player_id AS player_id,
+          faceit_nickname AS display_name,
+          OVERALL AS overall_brz,
+          AIM AS aim,
+          IMP AS impact,
+          UTL AS utility,
+          CON AS consistency,
+          INT AS intelligence,
+          EXP AS experience,
           role,
-          tier,
-          matches_analyzed,
-          score_version,
-          calculated_at
-        FROM `{PROJECT_ID}.{DATASET_ID}.player_card_scores`
-        WHERE player_id = @player_id
-        ORDER BY calculated_at DESC
+          'Unknown' AS tier,
+          season8_matches AS matches_analyzed,
+          'v2' AS score_version,
+          uploaded_at AS calculated_at
+        FROM `{PROJECT_ID}.{DATASET_ID}.card_scores`
+        WHERE faceit_player_id = @player_id
+        ORDER BY uploaded_at DESC
         LIMIT 1
     """
 
@@ -715,7 +785,7 @@ def get_latest_player_card_by_player_id(player_id: str) -> dict | None:
         "impact": row["impact"],
         "utility": row["utility"],
         "consistency": row["consistency"],
-        "clutch": row["clutch"],
+        "intelligence": row["intelligence"],
         "experience": row["experience"],
         "role": row["role"],
         "tier": row["tier"],

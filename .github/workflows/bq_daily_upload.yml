@@ -25,11 +25,28 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.13"
           cache: "pip"
 
       - name: Install dependencies
         run: pip install -r requirements.txt
+
+      - name: Run Data Collection & Scoring
+        env:
+          FACEIT_API_KEY: ${{ secrets.FACEIT_API_KEY }}
+        run: |
+          python src/collectors/export_faceit_season8_match_ids.py
+          python src/collectors/export_faceit_season8_stats.py
+          python src/collectors/enrich_faceit_lifetime_matches.py
+          python src/collectors/update_peak_elo_from_current.py
+          python src/scoring/calculate_brz_card_scores_v2.py
+
+      - name: Save CSV Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: brz-cards-csv-data
+          path: data/*.csv
+          retention-days: 7
 
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
@@ -40,7 +57,6 @@ jobs:
         env:
           GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
           BQ_DATASET_ID: ${{ secrets.BQ_DATASET_ID }}
-          FACEIT_API_KEY: ${{ secrets.FACEIT_API_KEY }}
         run: |
           SEASON="${{ github.event.inputs.season || 'season8' }}"
           python src/bigquery/upload_brz_cards_to_bq.py --season "$SEASON"
