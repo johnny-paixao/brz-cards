@@ -130,6 +130,8 @@ def get_ranking_players() -> list[dict]:
           OVERALL as overall,
           season8_matches,
           current_faceit_level,
+          current_faceit_elo,
+          uploaded_at,
           AIM,
           IMP,
           UTL,

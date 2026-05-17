@@ -1,6 +1,7 @@
 import math
 import os
 import time
+from datetime import datetime, timezone
 
 import discord
 from discord import app_commands
@@ -96,144 +97,6 @@ async def on_ready() -> None:
         print(f"- {guild.name} | Guild ID: {guild.id}")
 
 
-class PlayerSelect(discord.ui.Select):
-    def __init__(self, players: list[dict], page: int, total_pages: int):
-        options = []
-        for p in players:
-            label = str(p["faceit_nickname"])
-            if p["status"] == "ACTIVE":
-                desc = f"{p['overall']} OVR"
-            else:
-                desc = "INACTIVE"
-            
-            options.append(discord.SelectOption(
-                label=label,
-                description=desc,
-                value=label
-            ))
-            
-        super().__init__(
-            placeholder=f"Selecione um jogador (Página {page}/{total_pages})...",
-            min_values=1,
-            max_values=1,
-            options=options,
-        )
-        
-    async def callback(self, interaction: discord.Interaction):
-        await interaction.response.defer(thinking=True)
-        player_name = self.values[0]
-        
-        try:
-            # Busca dados da carta no BigQuery apenas para validar o player
-            # e montar a mensagem de resposta.
-            card_data = get_latest_player_card(player_name)
-
-            if card_data is None:
-                await interaction.followup.send(
-                    f"Não encontrei uma carta para o player `{player_name}`."
-                )
-                return
-
-            # Tenta resolver o identificador correto do player para o card generator.
-            player_identifier = (
-                card_data.get("player_id")
-                or card_data.get("player_slug")
-                or card_data.get("player_code")
-                or normalize_player_identifier(player_name)
-            )
-
-            display_name = (
-                card_data.get("display_name")
-                or card_data.get("player_name")
-                or player_name
-            )
-            overall_brz = card_data.get("overall_brz")
-            score_version = card_data.get("score_version") or "unknown_version"
-            calculated_at = card_data.get("calculated_at")
-
-            if calculated_at:
-                # Converte data para string no formato AAAAMMDD
-                date_str = calculated_at.strftime("%Y%m%d") if hasattr(calculated_at, "strftime") else str(calculated_at)[:10].replace("-", "")
-                expected_filename = f"{player_identifier}_season8_{score_version}_{date_str}.png"
-            else:
-                expected_filename = f"{player_identifier}_season8_{score_version}.png"
-
-            expected_path = GENERATED_DIR / expected_filename
-
-            if expected_path.exists():
-                print(f"[{player_identifier}] Cache HIT! Enviando imagem já gerada: {expected_path}")
-                card_path = str(expected_path)
-            else:
-                print(f"[{player_identifier}] Cache MISS. Gerando nova carta e salvando em: {expected_path}")
-                # Gera a carta e salva no caminho esperado
-                card_path = generate_player_card(player_identifier, output_path=expected_path)
-
-            content_lines = [f"**BRz Card — {display_name}**"]
-
-            if overall_brz is not None:
-                content_lines.append(f"Overall BRz: **{overall_brz}**")
-
-            if score_version:
-                content_lines.append(f"Score version: `{score_version}`")
-
-            await interaction.followup.send(
-                content="\n".join(content_lines),
-                file=discord.File(card_path),
-            )
-
-        except Exception as e:
-            print(f"Error generating BRz card for '{player_name}': {e}")
-
-            await interaction.followup.send(
-                "Não consegui gerar a carta agora. Ocorreu um erro no processo de geração."
-            )
-
-
-class PlayerPaginationView(discord.ui.View):
-    def __init__(self, players: list[dict], page: int = 1):
-        super().__init__(timeout=180)
-        self.players = players
-        self.page = page
-        self.per_page = 25
-        self.total_pages = math.ceil(len(players) / self.per_page) if players else 1
-        self.update_items()
-
-    def update_items(self):
-        self.clear_items()
-        
-        start_idx = (self.page - 1) * self.per_page
-        end_idx = start_idx + self.per_page
-        page_players = self.players[start_idx:end_idx]
-        
-        if page_players:
-            self.add_item(PlayerSelect(page_players, self.page, self.total_pages))
-        
-        prev_button = discord.ui.Button(label="Anterior", style=discord.ButtonStyle.secondary, disabled=(self.page == 1))
-        prev_button.callback = self.prev_page
-        self.add_item(prev_button)
-        
-        next_button = discord.ui.Button(label="Próxima", style=discord.ButtonStyle.primary, disabled=(self.page >= self.total_pages))
-        next_button.callback = self.next_page
-        self.add_item(next_button)
-
-        close_button = discord.ui.Button(label="Fechar", style=discord.ButtonStyle.danger)
-        close_button.callback = self.close_view
-        self.add_item(close_button)
-
-    async def prev_page(self, interaction: discord.Interaction):
-        self.page -= 1
-        self.update_items()
-        await interaction.response.edit_message(view=self)
-
-    async def next_page(self, interaction: discord.Interaction):
-        self.page += 1
-        self.update_items()
-        await interaction.response.edit_message(view=self)
-
-    async def close_view(self, interaction: discord.Interaction):
-        await interaction.response.edit_message(content="Menu fechado.", view=None)
-
-
 class RankingView(discord.ui.View):
     def __init__(self, players: list[dict]):
         super().__init__(timeout=180)
@@ -253,11 +116,31 @@ class RankingView(discord.ui.View):
                 lvl_str = f"lvl {lvl_val}" if lvl_val > 0 else "Unranked"
             except (ValueError, TypeError):
                 lvl_str = "Unranked"
+
+            elo = p.get('current_faceit_elo')
+            try:
+                elo_val = int(float(elo)) if elo is not None else 0
+                elo_str = f" ({elo_val} ELO)" if elo_val > 0 else ""
+            except (ValueError, TypeError):
+                elo_str = ""
                 
-            line = f"**{pos}.** {p['faceit_nickname']} — **{p['overall']} OVR** — {p['role']} — {lvl_str} — {p['season8_matches']} jogos"
+            line = f"**{pos}.** {p['faceit_nickname']} — **{p['overall']} OVR** — {p['role']} — {lvl_str}{elo_str} — {p['season8_matches']} jogos"
             desc_lines.append(line)
         
         embed.description = "\n".join(desc_lines)
+
+        # Get latest update timestamp from the players data
+        latest_update = None
+        for p in self.players:
+            up = p.get('uploaded_at')
+            if up:
+                if latest_update is None or up > latest_update:
+                    latest_update = up
+                    
+        if latest_update:
+            dt_str = latest_update.strftime("%d/%m/%Y às %H:%M UTC")
+            embed.set_footer(text=f"Última atualização: {dt_str}")
+
         return embed
 
     def update_items(self):
@@ -272,22 +155,85 @@ class RankingView(discord.ui.View):
 
 brzcards_group = app_commands.Group(name="brzcards", description="Comandos relacionados às Cartas BRz")
 
-@brzcards_group.command(name="card", description="Mostra um menu interativo para escolher o player e gerar a carta BRz.")
-async def card(interaction: discord.Interaction) -> None:
+@brzcards_group.command(name="card", description="Gera e mostra a carta BRz de um jogador específico.")
+@app_commands.describe(player="Nome do jogador (com autocomplete)")
+async def card(interaction: discord.Interaction, player: str) -> None:
     """
-    Mostra um menu interativo para escolher o player e gerar a carta BRz.
+    Gera e mostra a carta BRz de um jogador específico (com autocomplete).
     """
+    await interaction.response.defer(thinking=True)
+    try:
+        card_data = get_latest_player_card(player)
+        if card_data is None:
+            await interaction.followup.send(
+                f"Não encontrei uma carta para o player `{player}`."
+            )
+            return
+
+        player_identifier = (
+            card_data.get("player_id")
+            or card_data.get("player_slug")
+            or card_data.get("player_code")
+            or normalize_player_identifier(player)
+        )
+
+        display_name = (
+            card_data.get("display_name")
+            or player
+        )
+        overall_brz = card_data.get("overall_brz")
+        score_version = card_data.get("score_version") or "unknown_version"
+        calculated_at = card_data.get("calculated_at")
+
+        if calculated_at:
+            date_str = calculated_at.strftime("%Y%m%d") if hasattr(calculated_at, "strftime") else str(calculated_at)[:10].replace("-", "")
+            expected_filename = f"{player_identifier}_season8_{score_version}_{date_str}.png"
+        else:
+            expected_filename = f"{player_identifier}_season8_{score_version}.png"
+
+        expected_path = GENERATED_DIR / expected_filename
+
+        if expected_path.exists():
+            print(f"[{player_identifier}] Cache HIT! Enviando imagem já gerada: {expected_path}")
+            card_path = str(expected_path)
+        else:
+            print(f"[{player_identifier}] Cache MISS. Gerando nova carta e salvando em: {expected_path}")
+            card_path = generate_player_card(player_identifier, output_path=expected_path)
+
+        content_lines = [f"**BRz Card — {display_name}**"]
+        if overall_brz is not None:
+            content_lines.append(f"Overall BRz: **{overall_brz}**")
+
+        await interaction.followup.send(
+            content="\n".join(content_lines),
+            file=discord.File(card_path),
+        )
+
+    except Exception as e:
+        print(f"Error generating BRz card for '{player}': {e}")
+        await interaction.followup.send(
+            "Não consegui gerar a carta agora. Ocorreu um erro no processo de geração."
+        )
+
+@card.autocomplete("player")
+async def card_player_autocomplete(
+    interaction: discord.Interaction,
+    current: str,
+) -> list[app_commands.Choice[str]]:
     try:
         players = _get_cached_players()
         if not players:
-            await interaction.response.send_message("Nenhum jogador encontrado no momento.", ephemeral=True)
-            return
-            
-        view = PlayerPaginationView(players, page=1)
-        await interaction.response.send_message("Escolha um player para gerar a carta BRz:", view=view, ephemeral=True)
+            return []
+        
+        choices = []
+        for p in players:
+            name = p.get('faceit_nickname') or ""
+            if current.lower() in name.lower():
+                choices.append(app_commands.Choice(name=name, value=name))
+        return choices[:25]
     except Exception as e:
-        print(f"Error fetching player list: {e}")
-        await interaction.response.send_message("Ocorreu um erro ao carregar a lista de jogadores.", ephemeral=True)
+        print(f"Autocomplete error: {e}")
+        return []
 
 @brzcards_group.command(name="ranking", description="Mostra o ranking oficial da Season 8.")
 async def ranking(interaction: discord.Interaction) -> None:
