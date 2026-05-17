@@ -637,14 +637,14 @@ def _build_player_data(profile: dict, card_data: dict) -> dict:
         "name": profile.get("display_name") or "Unknown",
         "country_code": profile.get("country_code") or "PT",
         "faceit_level": faceit_level,
-        "overall": card_data.get("overall_brz") or 0,
+        "overall": _safe_int_from_score(card_data.get("overall_brz")),
         "role": card_data.get("role") or "RIFLER",
-        "aim": card_data.get("aim") or 0,
-        "imp": card_data.get("impact") or 0,
-        "utl": card_data.get("utility") or 0,
-        "con": card_data.get("consistency") or 0,
-        "int": card_data.get("intelligence") or card_data.get("clutch") or 0,
-        "exp": card_data.get("experience") or 0,
+        "aim": _safe_int_from_score(card_data.get("aim")),
+        "imp": _safe_int_from_score(card_data.get("impact")),
+        "utl": _safe_int_from_score(card_data.get("utility")),
+        "con": _safe_int_from_score(card_data.get("consistency")),
+        "int": _safe_int_from_score(card_data.get("intelligence") or card_data.get("clutch")),
+        "exp": _safe_int_from_score(card_data.get("experience")),
     }
 
 

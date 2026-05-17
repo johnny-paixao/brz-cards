@@ -138,7 +138,12 @@ class RankingView(discord.ui.View):
                     latest_update = up
                     
         if latest_update:
-            dt_str = latest_update.strftime("%d/%m/%Y às %H:%M UTC")
+            from zoneinfo import ZoneInfo
+            lisbon_tz = ZoneInfo("Europe/Lisbon")
+            if latest_update.tzinfo is None:
+                latest_update = latest_update.replace(tzinfo=timezone.utc)
+            calc_pt = latest_update.astimezone(lisbon_tz)
+            dt_str = calc_pt.strftime("%d/%m/%Y às %H:%M (Horário de Portugal)")
             embed.set_footer(text=f"Última atualização: {dt_str}")
 
         return embed
@@ -203,6 +208,15 @@ async def card(interaction: discord.Interaction, player: str) -> None:
         content_lines = [f"**BRz Card — {display_name}**"]
         if overall_brz is not None:
             content_lines.append(f"Overall BRz: **{overall_brz}**")
+
+        if calculated_at:
+            from zoneinfo import ZoneInfo
+            lisbon_tz = ZoneInfo("Europe/Lisbon")
+            if calculated_at.tzinfo is None:
+                calculated_at = calculated_at.replace(tzinfo=timezone.utc)
+            calc_pt = calculated_at.astimezone(lisbon_tz)
+            dt_str = calc_pt.strftime("%d/%m/%Y às %H:%M (Horário de Portugal)")
+            content_lines.append(f"Última atualização dos stats: {dt_str}")
 
         await interaction.followup.send(
             content="\n".join(content_lines),
