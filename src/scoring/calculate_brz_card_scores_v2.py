@@ -84,6 +84,7 @@ COLUMN_ALIASES = {
         "average_adr",
     ],
     "hs": [
+        "Average Headshots %",
         "Headshots %",
         "HS%",
         "HS",
