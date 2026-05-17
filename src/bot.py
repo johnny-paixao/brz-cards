@@ -96,6 +96,19 @@ async def on_ready() -> None:
     for guild in client.guilds:
         print(f"- {guild.name} | Guild ID: {guild.id}")
 
+    # Set the bot's avatar profile picture to brz_logo.png safely
+    try:
+        logo_path = Path("assets/logos/brz_logo.png")
+        if logo_path.exists():
+            with open(logo_path, "rb") as f:
+                avatar_bytes = f.read()
+            await client.user.edit(avatar=avatar_bytes)
+            print("Bot avatar updated successfully to brz_logo.png.")
+        else:
+            print("brz_logo.png not found in assets/logos.")
+    except Exception as e:
+        print(f"Could not update bot avatar (it might be rate-limited by Discord): {e}")
+
 
 class RankingView(discord.ui.View):
     def __init__(self, players: list[dict]):
