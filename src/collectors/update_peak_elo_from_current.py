@@ -173,8 +173,8 @@ def main() -> None:
         print(f"[ERROR] Arquivo nao encontrado: {DATA_PATH}", file=sys.stderr)
         sys.exit(1)
 
-    # Read (dtype=str evita conversoes implicitas)
-    df = pd.read_csv(DATA_PATH, dtype=str)
+    # Read (dtype=object evita conversoes implicitas de IDs longos e permite atribuicoes numericas)
+    df = pd.read_csv(DATA_PATH, dtype=object)
     print(f"[OK] Arquivo lido: {DATA_PATH} ({len(df)} players)")
 
     now_utc = datetime.now(timezone.utc).isoformat()
