@@ -327,12 +327,12 @@ def prepare_match_ids(season: str) -> pd.DataFrame:
 
 def prepare_season8_stats() -> pd.DataFrame:
     path = DATA_DIR / "brz_faceit_season8_stats.csv"
-    df = pd.read_csv(path)
+    df = pd.read_csv(path, dtype={"steam_id_64": str, "faceit_player_id": str})
     df = sanitize_columns(df)
 
     # steam_id_64 como STRING
     df["steam_id_64"] = df["steam_id_64"].apply(
-        lambda x: str(int(x)) if pd.notna(x) else None
+        lambda x: str(x).split(".")[0].strip() if pd.notna(x) and str(x).strip() != "" and str(x).strip().lower() != "nan" else None
     )
 
     # Colunas inteiras

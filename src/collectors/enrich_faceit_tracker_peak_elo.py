@@ -213,7 +213,7 @@ async def main_async() -> None:
 
     DEBUG_DIR.mkdir(parents=True, exist_ok=True)
 
-    df = pd.read_csv(DATA_PATH)
+    df = pd.read_csv(DATA_PATH, dtype=object)
 
     required_columns = ["faceit_nickname_official", "cs2_faceit_elo"]
     missing = [col for col in required_columns if col not in df.columns]

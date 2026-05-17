@@ -102,7 +102,7 @@ def main() -> None:
 
     if OUTPUT_CSV_PATH.exists():
         import pandas as pd
-        df = pd.read_csv(OUTPUT_CSV_PATH)
+        df = pd.read_csv(OUTPUT_CSV_PATH, dtype=object)
 
         base_cols = [
             "faceit_nickname_input",

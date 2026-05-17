@@ -384,7 +384,7 @@ def calculate_scores() -> pd.DataFrame:
     stats_df = pd.read_csv(SEASON8_STATS_PATH)
 
     if PLAYERS_ENRICHED_PATH.exists():
-        players_df = pd.read_csv(PLAYERS_ENRICHED_PATH)
+        players_df = pd.read_csv(PLAYERS_ENRICHED_PATH, dtype=object)
         df = merge_context_data(stats_df, players_df)
     else:
         print(f"[WARN] Enriched players file not found: {PLAYERS_ENRICHED_PATH}")

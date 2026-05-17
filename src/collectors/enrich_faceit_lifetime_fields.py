@@ -91,7 +91,7 @@ def main() -> None:
     if not DATA_PATH.exists():
         raise FileNotFoundError(f"File not found: {DATA_PATH}")
 
-    df = pd.read_csv(DATA_PATH)
+    df = pd.read_csv(DATA_PATH, dtype=object)
 
     required_cols = [
         "faceit_nickname_input",

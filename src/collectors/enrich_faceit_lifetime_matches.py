@@ -65,7 +65,7 @@ def main() -> None:
     if not DATA_PATH.exists():
         raise FileNotFoundError(f"File not found: {DATA_PATH}")
 
-    df = pd.read_csv(DATA_PATH)
+    df = pd.read_csv(DATA_PATH, dtype=object)
 
     required_columns = ["faceit_nickname_official", "faceit_player_id"]
     missing = [col for col in required_columns if col not in df.columns]
