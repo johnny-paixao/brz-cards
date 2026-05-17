@@ -234,55 +234,37 @@ class PlayerPaginationView(discord.ui.View):
         await interaction.response.edit_message(content="Menu fechado.", view=None)
 
 
-class RankingPaginationView(discord.ui.View):
-    def __init__(self, players: list[dict], page: int = 1):
+class RankingView(discord.ui.View):
+    def __init__(self, players: list[dict]):
         super().__init__(timeout=180)
         self.players = players
-        self.page = page
-        self.per_page = 10
-        self.total_pages = math.ceil(len(players) / self.per_page) if players else 1
         self.update_items()
 
     def get_embed(self) -> discord.Embed:
         embed = discord.Embed(title="🏆 Ranking BRz Cards — Season 8", color=discord.Color.gold())
-        start_idx = (self.page - 1) * self.per_page
-        end_idx = start_idx + self.per_page
-        page_players = self.players[start_idx:end_idx]
 
         desc_lines = []
-        for i, p in enumerate(page_players):
-            pos = start_idx + i + 1
-            line = f"**{pos}.** {p['faceit_nickname']} — **{p['overall']} OVR** — {p['role']} — lvl {p['current_faceit_level']} — {p['season8_matches']} jogos"
+        for i, p in enumerate(self.players):
+            pos = i + 1
+            
+            lvl = p.get('current_faceit_level')
+            try:
+                lvl_val = int(float(lvl)) if lvl is not None else 0
+                lvl_str = f"lvl {lvl_val}" if lvl_val > 0 else "Unranked"
+            except (ValueError, TypeError):
+                lvl_str = "Unranked"
+                
+            line = f"**{pos}.** {p['faceit_nickname']} — **{p['overall']} OVR** — {p['role']} — {lvl_str} — {p['season8_matches']} jogos"
             desc_lines.append(line)
         
         embed.description = "\n".join(desc_lines)
-        embed.set_footer(text=f"Página {self.page}/{self.total_pages}")
         return embed
 
     def update_items(self):
         self.clear_items()
-        
-        prev_button = discord.ui.Button(label="Anterior", style=discord.ButtonStyle.secondary, disabled=(self.page <= 1))
-        prev_button.callback = self.prev_page
-        self.add_item(prev_button)
-        
-        next_button = discord.ui.Button(label="Próxima", style=discord.ButtonStyle.primary, disabled=(self.page >= self.total_pages))
-        next_button.callback = self.next_page
-        self.add_item(next_button)
-
         close_button = discord.ui.Button(label="Fechar", style=discord.ButtonStyle.danger)
         close_button.callback = self.close_view
         self.add_item(close_button)
-
-    async def prev_page(self, interaction: discord.Interaction):
-        self.page -= 1
-        self.update_items()
-        await interaction.response.edit_message(embed=self.get_embed(), view=self)
-
-    async def next_page(self, interaction: discord.Interaction):
-        self.page += 1
-        self.update_items()
-        await interaction.response.edit_message(embed=self.get_embed(), view=self)
 
     async def close_view(self, interaction: discord.Interaction):
         await interaction.response.edit_message(content="Menu de ranking fechado.", embed=None, view=None)
@@ -310,7 +292,7 @@ async def card(interaction: discord.Interaction) -> None:
 @brzcards_group.command(name="ranking", description="Mostra o ranking oficial da Season 8.")
 async def ranking(interaction: discord.Interaction) -> None:
     """
-    Mostra o ranking público da Season 8 com paginação.
+    Mostra o ranking público da Season 8 em lista única.
     """
     try:
         players = _get_cached_ranking()
@@ -318,7 +300,7 @@ async def ranking(interaction: discord.Interaction) -> None:
             await interaction.response.send_message("Nenhum jogador encontrado no ranking.", ephemeral=True)
             return
 
-        view = RankingPaginationView(players, page=1)
+        view = RankingView(players)
         await interaction.response.send_message(embed=view.get_embed(), view=view)
     except Exception as e:
         print(f"Error fetching ranking: {e}")

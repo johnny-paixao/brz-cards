@@ -366,7 +366,11 @@ def merge_context_data(stats_df: pd.DataFrame, players_df: pd.DataFrame) -> pd.D
         canonical = f"__{semantic_key}"
 
         if existing_col is not None:
-            merged[canonical] = merged[existing_col]
+            enriched_col = f"{existing_col}_enriched"
+            if enriched_col in merged.columns:
+                merged[canonical] = merged[enriched_col].combine_first(merged[existing_col])
+            else:
+                merged[canonical] = merged[existing_col]
         else:
             merged[canonical] = 0
 

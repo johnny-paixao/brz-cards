@@ -707,7 +707,7 @@ def get_player_profile(player_id: str) -> dict | None:
           steam_avatar_url,
           faceit_level
         FROM `{PROJECT_ID}.{DATASET_ID}.players`
-        WHERE player_id = @player_id
+        WHERE player_id = @player_id OR faceit_player_id = @player_id
         LIMIT 1
     """
 
