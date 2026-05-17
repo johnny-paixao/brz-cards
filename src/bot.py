@@ -118,7 +118,7 @@ class RankingView(discord.ui.View):
         self.update_items()
 
     def get_embed(self) -> discord.Embed:
-        embed = discord.Embed(title="🏆 Ranking BRz Cards — Season 8", color=discord.Color.gold())
+        embed = discord.Embed(title="🏆 Ranking BRz Cards — Season 8 (players ativos com no mínimo 20 partidas na Season 8)", color=discord.Color.gold())
 
         desc_lines = []
         for i, p in enumerate(self.players):
