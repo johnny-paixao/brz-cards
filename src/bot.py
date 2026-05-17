@@ -268,17 +268,18 @@ async def ranking(interaction: discord.Interaction) -> None:
     """
     Mostra o ranking público da Season 8 em lista única.
     """
+    await interaction.response.defer(thinking=True)
     try:
         players = _get_cached_ranking()
         if not players:
-            await interaction.response.send_message("Nenhum jogador encontrado no ranking.", ephemeral=True)
+            await interaction.followup.send("Nenhum jogador encontrado no ranking.")
             return
 
         view = RankingView(players)
-        await interaction.response.send_message(embed=view.get_embed(), view=view)
+        await interaction.followup.send(embed=view.get_embed(), view=view)
     except Exception as e:
         print(f"Error fetching ranking: {e}")
-        await interaction.response.send_message("Ocorreu um erro ao carregar o ranking.", ephemeral=True)
+        await interaction.followup.send("Ocorreu um erro ao carregar o ranking.")
 
 client.tree.add_command(brzcards_group)
 
