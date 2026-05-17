@@ -1,6 +1,7 @@
 import csv
 import os
 from pathlib import Path
+import time
 
 import requests
 from dotenv import load_dotenv
@@ -99,6 +100,65 @@ def main() -> None:
     print(f"Output: {OUTPUT_CSV_PATH}")
     print("-" * 80)
 
+    if OUTPUT_CSV_PATH.exists():
+        import pandas as pd
+        df = pd.read_csv(OUTPUT_CSV_PATH)
+
+        base_cols = [
+            "faceit_nickname_input",
+            "faceit_nickname_official",
+            "faceit_player_id",
+            "country",
+            "steam_id_64",
+            "steam_nickname",
+            "cs2_skill_level",
+            "cs2_faceit_elo",
+            "cs2_game_player_id",
+            "cs2_game_player_name",
+            "avatar",
+            "faceit_url",
+            "activated_at",
+        ]
+        for col in base_cols:
+            if col not in df.columns:
+                df[col] = None
+
+        for nickname in nicknames:
+            player = get_faceit_player_by_nickname(nickname)
+
+            if player is None:
+                print(f"[NOT FOUND] {nickname}")
+                continue
+
+            row = build_enriched_player_row(nickname, player)
+
+            mask = (df["faceit_nickname_input"].str.lower() == nickname.lower()) | \
+                   (df["faceit_nickname_official"].str.lower() == nickname.lower())
+
+            if mask.any():
+                idx = df[mask].index[0]
+                for key, val in row.items():
+                    df.at[idx, key] = val
+                print(
+                    f"[UPDATED] {row['faceit_nickname_official']} | "
+                    f"level={row['cs2_skill_level']} | "
+                    f"elo={row['cs2_faceit_elo']}"
+                )
+            else:
+                new_row_df = pd.DataFrame([row])
+                df = pd.concat([df, new_row_df], ignore_index=True)
+                print(
+                    f"[ADDED] {row['faceit_nickname_official']} | "
+                    f"level={row['cs2_skill_level']} | "
+                    f"elo={row['cs2_faceit_elo']}"
+                )
+            time.sleep(0.15)
+
+        df.to_csv(OUTPUT_CSV_PATH, index=False, encoding="utf-8-sig")
+        print("-" * 80)
+        print(f"Updated in-place and saved enriched players base to: {OUTPUT_CSV_PATH}")
+        return
+
     rows = []
 
     for nickname in nicknames:
@@ -135,6 +195,7 @@ def main() -> None:
             f"elo={row['cs2_faceit_elo']} | "
             f"country={row['country']}"
         )
+        time.sleep(0.15)
 
     OUTPUT_CSV_PATH.parent.mkdir(parents=True, exist_ok=True)
 

@@ -35,9 +35,11 @@ jobs:
         env:
           FACEIT_API_KEY: ${{ secrets.FACEIT_API_KEY }}
         run: |
+          python src/collectors/export_faceit_players_base.py
           python src/collectors/export_faceit_season8_match_ids.py
           python src/collectors/export_faceit_season8_stats.py
           python src/collectors/enrich_faceit_lifetime_matches.py
+          python src/collectors/enrich_faceit_lifetime_fields.py
           python src/collectors/update_peak_elo_from_current.py
           python src/scoring/calculate_brz_card_scores_v2.py
 
