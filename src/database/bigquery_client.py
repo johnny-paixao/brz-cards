@@ -234,8 +234,8 @@ def get_ruler_data() -> list[dict]:
           s.Flashes_per_Round,
           s.Win_Rate,
           s.Matches AS Season8_Matches,
-          s.`1v1_Win_Rate` AS win_rate_1v1,
-          s.`1v2_Win_Rate` AS win_rate_1v2,
+          (s.`1v1_Win_Rate` * 100) AS win_rate_1v1,
+          (s.`1v2_Win_Rate` * 100) AS win_rate_1v2,
           (COALESCE(s.Total_1v1_Count, 0) + COALESCE(s.Total_1v2_Count, 0)) AS Clutch_Volume,
           a.known_peak_elo,
           a.lifetime_faceit_matches
