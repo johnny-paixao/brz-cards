@@ -153,6 +153,160 @@ def get_ranking_players() -> list[dict]:
     return [dict(row.items()) for row in query_job.result()]
 
 
+# ------------------------------------------------------------------
+# Stat Rankings & Ruler  (read-only, used by bot commands)
+# ------------------------------------------------------------------
+
+VALID_STATS = {"AIM", "IMP", "UTL", "CON", "INT", "EXP"}
+
+
+def get_stat_ranking(stat: str) -> list[dict]:
+    """
+    Get ranking of ACTIVE players for a specific stat (AIM, IMP, etc.).
+
+    Returns the latest record per player, sorted by the chosen stat DESC,
+    then OVERALL DESC, then season8_matches DESC.
+    """
+    stat = stat.upper()
+    if stat not in VALID_STATS:
+        raise ValueError(f"Invalid stat '{stat}'. Must be one of {VALID_STATS}.")
+
+    client = get_bigquery_client()
+
+    # Column name is validated above — safe to interpolate.
+    query = f"""
+        SELECT
+          faceit_nickname,
+          role,
+          OVERALL,
+          season8_matches,
+          {stat} AS stat_value,
+          uploaded_at
+        FROM `{PROJECT_ID}.{DATASET_ID}.card_scores`
+        WHERE status = 'ACTIVE'
+        QUALIFY ROW_NUMBER() OVER (PARTITION BY faceit_nickname ORDER BY uploaded_at DESC) = 1
+        ORDER BY {stat} DESC, OVERALL DESC, season8_matches DESC
+    """
+
+    job_config = bigquery.QueryJobConfig(
+        maximum_bytes_billed=20 * 1024 * 1024,
+    )
+
+    query_job = client.query(query, job_config=job_config)
+    return [dict(row.items()) for row in query_job.result()]
+
+
+def get_ruler_data() -> list[dict]:
+    """
+    Get the consolidated community ruler — who leads each raw variable.
+
+    Joins card_scores (latest ACTIVE players) with season8_stats for raw
+    performance variables.  Returns a list of dicts with keys:
+        label, faceit_nickname, value, format_type
+    """
+    client = get_bigquery_client()
+
+    query = f"""
+        WITH active_players AS (
+          SELECT
+            faceit_nickname,
+            known_peak_elo,
+            lifetime_faceit_matches
+          FROM `{PROJECT_ID}.{DATASET_ID}.card_scores`
+          WHERE status = 'ACTIVE'
+          QUALIFY ROW_NUMBER() OVER (
+            PARTITION BY faceit_nickname ORDER BY uploaded_at DESC
+          ) = 1
+        )
+        SELECT
+          s.faceit_nickname,
+          s.Average_K_D_Ratio,
+          s.Average_K_R_Ratio,
+          s.ADR,
+          s.Average_Headshots,
+          s.Entry_Rate,
+          s.Entry_Success_Rate,
+          s.Utility_Success_Rate,
+          s.Utility_Damage_per_Round,
+          s.Flash_Success_Rate,
+          s.Enemies_Flashed_per_Round,
+          s.Utility_Usage_per_Round,
+          s.Flashes_per_Round,
+          s.Win_Rate,
+          s.Matches AS Season8_Matches,
+          s.`1v1_Win_Rate` AS win_rate_1v1,
+          s.`1v2_Win_Rate` AS win_rate_1v2,
+          (COALESCE(s.Total_1v1_Count, 0) + COALESCE(s.Total_1v2_Count, 0)) AS Clutch_Volume,
+          a.known_peak_elo,
+          a.lifetime_faceit_matches
+        FROM active_players a
+        JOIN `{PROJECT_ID}.{DATASET_ID}.season8_stats` s
+          ON LOWER(a.faceit_nickname) = LOWER(s.faceit_nickname)
+    """
+
+    job_config = bigquery.QueryJobConfig(
+        maximum_bytes_billed=20 * 1024 * 1024,
+    )
+
+    query_job = client.query(query, job_config=job_config)
+    rows = [dict(row.items()) for row in query_job.result()]
+
+    if not rows:
+        return []
+
+    # Variable definitions: (label, column_key, format_type)
+    # format_type: "float2" = 2 decimals, "pct" = percentage, "int" = integer
+    variables = [
+        ("K/D Ratio",                "Average_K_D_Ratio",         "float2"),
+        ("K/R Ratio",                "Average_K_R_Ratio",         "float2"),
+        ("ADR",                      "ADR",                       "float2"),
+        ("HS%",                      "Average_Headshots",         "pct"),
+        ("Entry Rate",               "Entry_Rate",                "float2"),
+        ("Entry Success Rate",       "Entry_Success_Rate",        "float2"),
+        ("Utility Success Rate",     "Utility_Success_Rate",      "float2"),
+        ("Utility Damage per Round", "Utility_Damage_per_Round",  "float2"),
+        ("Flash Success Rate",       "Flash_Success_Rate",        "float2"),
+        ("Enemies Flashed per Round","Enemies_Flashed_per_Round", "float2"),
+        ("Utility Usage per Round",  "Utility_Usage_per_Round",   "float2"),
+        ("Flashes per Round",        "Flashes_per_Round",         "float2"),
+        ("Win Rate",                 "Win_Rate",                  "pct"),
+        ("Season 8 Matches",         "Season8_Matches",           "int"),
+        ("1v1 Win Rate",             "win_rate_1v1",              "pct"),
+        ("1v2 Win Rate",             "win_rate_1v2",              "pct"),
+        ("Clutch Volume",            "Clutch_Volume",             "int"),
+        ("Highest ELO",              "known_peak_elo",            "int"),
+        ("Lifetime FACEIT Matches",  "lifetime_faceit_matches",   "int"),
+    ]
+
+    ruler: list[dict] = []
+
+    for label, col_key, fmt in variables:
+        best_player = None
+        best_value = None
+
+        for row in rows:
+            val = row.get(col_key)
+            if val is None:
+                continue
+            try:
+                val = float(val)
+            except (ValueError, TypeError):
+                continue
+            if best_value is None or val > best_value:
+                best_value = val
+                best_player = row["faceit_nickname"]
+
+        if best_player is not None:
+            ruler.append({
+                "label": label,
+                "faceit_nickname": best_player,
+                "value": best_value,
+                "format_type": fmt,
+            })
+
+    return ruler
+
+
 def get_active_players_with_steam64() -> list[dict]:
     """
     Get active players that have a Steam64 ID.
