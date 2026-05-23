@@ -17,6 +17,8 @@ jobs:
   upload-to-bigquery:
     name: Upload CSVs to BigQuery
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout repository
@@ -42,6 +44,14 @@ jobs:
           python src/collectors/enrich_faceit_lifetime_fields.py
           python src/collectors/update_peak_elo_from_current.py
           python src/scoring/calculate_brz_card_scores_v2.py
+
+      - name: Persist incremental match-rounds cache
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/cache/faceit_match_rounds/
+          git diff --cached --quiet || git commit -m "chore: update match-rounds cache"
+          git push
 
       - name: Save CSV Artifacts
         uses: actions/upload-artifact@v4

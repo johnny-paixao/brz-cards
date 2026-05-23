@@ -23,52 +23,89 @@ CACHE_DIR.mkdir(parents=True, exist_ok=True)
 CACHE_ROUNDS_DIR.mkdir(parents=True, exist_ok=True)
 
 
+def _load_cache(cache_path: Path) -> list:
+    """Carrega rounds do cache no disco."""
+    if not cache_path.exists():
+        return []
+    try:
+        with open(cache_path, mode="r", encoding="utf-8") as file:
+            data = json.load(file)
+            # Suporta formato antigo (payload.cs2.match_rounds) e novo (lista direta)
+            if isinstance(data, list):
+                return data
+            payload = data.get("payload", {})
+            cs2 = payload.get("cs2", {})
+            return cs2.get("match_rounds", cs2.get("matchRounds", []))
+    except Exception:
+        return []
+
+
+def _save_cache(cache_path: Path, rounds: list) -> None:
+    """Salva rounds no disco como lista direta (formato simplificado)."""
+    with open(cache_path, mode="w", encoding="utf-8") as file:
+        json.dump(rounds, file, ensure_ascii=False, indent=2)
+
+
+def _merge_rounds(existing: list, fresh: list) -> list:
+    """Mescla rounds existentes com novos, sem duplicatas, ordenados por end_time desc."""
+    by_id: dict[str, dict] = {}
+    for r in existing:
+        mid = r.get("match_id") or r.get("matchId")
+        if mid:
+            by_id[mid] = r
+    for r in fresh:
+        mid = r.get("match_id") or r.get("matchId")
+        if mid:
+            by_id[mid] = r  # Dados mais recentes sobrescrevem
+    merged = list(by_id.values())
+    merged.sort(key=lambda r: r.get("end_time", ""), reverse=True)
+    return merged
+
+
 def load_or_fetch_match_rounds(player_id: str, nickname: str | None = None) -> list:
-    cache_path = CACHE_ROUNDS_DIR / f"{player_id}.json"
+    """Busca match-rounds com cache incremental.
     
-    if cache_path.exists():
-        try:
-            with open(cache_path, mode="r", encoding="utf-8") as file:
-                data = json.load(file)
-                payload = data.get("payload", {})
-                cs2 = payload.get("cs2", {})
-                rounds = cs2.get("match_rounds", cs2.get("matchRounds", []))
-                return rounds
-        except Exception as e:
-            print(f"  [CACHE ERROR] Failed to read cache for {nickname or player_id}: {e}")
-            
-    # Se não existir, baixa usando curl_cffi para contornar o Cloudflare
-    print(f"  [FETCH] Downloading internal match-rounds for '{nickname or player_id}' via curl_cffi...")
+    A cada execução:
+    1. Carrega rounds já conhecidos do disco
+    2. Busca os 30 mais recentes da API interna
+    3. Mescla por match_id (sem duplicatas)
+    4. Salva cache atualizado no disco
+    5. Retorna TODOS os rounds conhecidos
+    
+    Ao longo de múltiplas execuções, acumula automaticamente todas as partidas.
+    """
+    cache_path = CACHE_ROUNDS_DIR / f"{player_id}.json"
+    existing = _load_cache(cache_path)
+    
+    # Buscar os 30 mais recentes da API
     url = f"https://www.faceit.com/api/statistics/v1/cs2/players/{player_id}/match-rounds?limit=30"
+    fresh: list = []
     
     try:
         from curl_cffi import requests as curl_requests
         resp = curl_requests.get(url, impersonate="chrome", timeout=25)
         if resp.status_code == 200:
             data = resp.json()
-            with open(cache_path, mode="w", encoding="utf-8") as file:
-                json.dump(data, file, ensure_ascii=False, indent=2)
-            
             payload = data.get("payload", {})
             cs2 = payload.get("cs2", {})
-            rounds = cs2.get("match_rounds", cs2.get("matchRounds", []))
-            print(f"  [FETCH OK] Got {len(rounds)} rounds for {nickname or player_id}.")
-            time.sleep(1.5) # Pausa polida entre requisições
-            return rounds
+            fresh = cs2.get("match_rounds", cs2.get("matchRounds", []))
         else:
             print(f"  [FETCH WARN] Internal API returned status {resp.status_code} for {nickname or player_id}")
     except Exception as e:
-        print(f"  [FETCH ERROR] Failed to fetch internal stats for {nickname or player_id}: {e}")
-        
-    # Salvar cache vazio em caso de falha para não ficar martelando o servidor
-    try:
-        empty_data = {"payload": {"cs2": {"match_rounds": []}}}
-        with open(cache_path, mode="w", encoding="utf-8") as file:
-            json.dump(empty_data, file, ensure_ascii=False, indent=2)
-    except Exception:
-        pass
-        
-    return []
+        print(f"  [FETCH ERROR] Failed to fetch for {nickname or player_id}: {e}")
+    
+    # Mesclar e salvar
+    merged = _merge_rounds(existing, fresh)
+    new_count = len(merged) - len(existing)
+    
+    if new_count > 0 or not existing:
+        _save_cache(cache_path, merged)
+    
+    label = nickname or player_id
+    print(f"  [{label}] cache={len(existing)} + fresh={len(fresh)} -> merged={len(merged)} (+{max(0, new_count)} new)")
+    time.sleep(1.5)  # Pausa polida entre requisições
+    
+    return merged
 
 
 def get_api_key() -> str:
@@ -500,27 +537,11 @@ def main() -> None:
         for player_id, player in player_by_id.items()
     }
 
-    # Carregar ratings extraídos externamente para ultrapassar o limite de 30 partidas do match-rounds
-    scraped_ratings = {}
-    enriched_csv_path = BASE_DIR / "data" / "faceit_matches_JohnnyPanda_last_270_enriched.csv"
-    if enriched_csv_path.exists():
-        try:
-            with open(enriched_csv_path, mode="r", encoding="utf-8") as f:
-                reader = csv.DictReader(f)
-                for row in reader:
-                    mid = row.get("Match ID")
-                    rating = row.get("Rating")
-                    if mid and rating and rating != "N/A":
-                        scraped_ratings[mid] = safe_float(rating)
-            print(f"Loaded {len(scraped_ratings)} scraped ratings for JohnnyPanda from: {enriched_csv_path.name}")
-        except Exception as e:
-            print(f"Error loading scraped ratings: {e}")
-
     print(f"Loaded {len(players)} player(s).")
     print(f"Loaded {len(match_rows)} Season 8 match row(s).")
     print("-" * 80)
 
-    print("Pre-loading internal statistics (match-rounds) for players...")
+    print("Pre-loading internal statistics (match-rounds) with incremental cache...")
     match_rounds_cache = {}
     for player_id, player in player_by_id.items():
         nick = player.get("faceit_nickname_official") or player.get("faceit_nickname_input")
@@ -544,7 +565,7 @@ def main() -> None:
                 print(f"[MISS] {index}/{len(match_rows)} {nickname} | match={match_id}")
                 continue
 
-            # Buscar dados ricos dessa partida no cache do jogador
+            # Buscar dados ricos dessa partida no cache incremental do jogador
             rich_match_data = None
             player_rounds = match_rounds_cache.get(player_id, [])
             for r in player_rounds:
@@ -552,12 +573,6 @@ def main() -> None:
                 if mid == match_id:
                     rich_match_data = r
                     break
-
-            # Se não há dados do cache oficial, mas temos rating raspado da partida
-            if not rich_match_data and match_id in scraped_ratings:
-                rich_match_data = {
-                    "faceit_rating": scraped_ratings[match_id]
-                }
 
             update_aggregate(aggregates[player_id], player_stats, rich_match_data)
 

@@ -2,6 +2,7 @@
 __pycache__/
 .env
 *.json
+!data/cache/faceit_match_rounds/*.json
 credentials/
 .DS_Store
 .vscode/
