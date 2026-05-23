@@ -160,7 +160,8 @@ def get_ranking_embed(players: list[dict]) -> discord.Embed:
         except (ValueError, TypeError):
             elo_str = ""
             
-        line = f"**{pos}.** {p['faceit_nickname']} — **{p['overall']} OVR** — {p['role']} — {lvl_str}{elo_str} — {p['season8_matches']} jogos"
+        nick_escaped = discord.utils.escape_markdown(p['faceit_nickname'])
+        line = f"**{pos}.** {nick_escaped} — **{p['overall']} OVR** — {p['role']} — {lvl_str}{elo_str} — {p['season8_matches']} jogos"
         desc_lines.append(line)
     
     embed.description = "\n".join(desc_lines)
@@ -209,8 +210,9 @@ def get_stat_ranking_embed(players: list[dict], stat_name: str) -> discord.Embed
         role = p.get("role", "?")
         matches = p.get("season8_matches", "?")
 
+        nick_escaped = discord.utils.escape_markdown(p['faceit_nickname'])
         line = (
-            f"**{i}.** {p['faceit_nickname']} — "
+            f"**{i}.** {nick_escaped} — "
             f"**{stat_name_upper} {stat_display}** — "
             f"{overall} OVR — {role} — {matches} jogos"
         )
@@ -246,7 +248,8 @@ def get_ruler_embed(ruler_data: list[dict]) -> discord.Embed:
     desc_lines = []
     for i, item in enumerate(ruler_data, start=1):
         formatted_value = _format_ruler_value(item["value"], item["format_type"])
-        line = f"**{i}.** {item['label']} — {item['faceit_nickname']} ({formatted_value})"
+        nick_escaped = discord.utils.escape_markdown(item['faceit_nickname'])
+        line = f"**{i}.** {item['label']} — {nick_escaped} ({formatted_value})"
         desc_lines.append(line)
 
     embed.description = "\n".join(desc_lines)
@@ -309,7 +312,8 @@ async def card(interaction: discord.Interaction, player: str) -> None:
             print(f"[{player_identifier}] Cache MISS. Gerando nova carta e salvando em: {expected_path}")
             card_path = generate_player_card(player_identifier, output_path=expected_path)
 
-        content_lines = [f"**BRz Card — {display_name}**"]
+        display_name_escaped = discord.utils.escape_markdown(display_name)
+        content_lines = [f"**BRz Card — {display_name_escaped}**"]
         if overall_brz is not None:
             content_lines.append(f"Overall BRz: **{overall_brz}**")
 
