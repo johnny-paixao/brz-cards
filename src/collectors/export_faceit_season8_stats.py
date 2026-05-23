@@ -5,7 +5,9 @@ import time
 from pathlib import Path
 
 import requests
+from dotenv import load_dotenv
 
+load_dotenv()
 
 BASE_DIR = Path(__file__).resolve().parents[2]
 
@@ -498,6 +500,22 @@ def main() -> None:
         for player_id, player in player_by_id.items()
     }
 
+    # Carregar ratings extraídos externamente para ultrapassar o limite de 30 partidas do match-rounds
+    scraped_ratings = {}
+    enriched_csv_path = BASE_DIR / "data" / "faceit_matches_JohnnyPanda_last_270_enriched.csv"
+    if enriched_csv_path.exists():
+        try:
+            with open(enriched_csv_path, mode="r", encoding="utf-8") as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    mid = row.get("Match ID")
+                    rating = row.get("Rating")
+                    if mid and rating and rating != "N/A":
+                        scraped_ratings[mid] = safe_float(rating)
+            print(f"Loaded {len(scraped_ratings)} scraped ratings for JohnnyPanda from: {enriched_csv_path.name}")
+        except Exception as e:
+            print(f"Error loading scraped ratings: {e}")
+
     print(f"Loaded {len(players)} player(s).")
     print(f"Loaded {len(match_rows)} Season 8 match row(s).")
     print("-" * 80)
@@ -534,6 +552,12 @@ def main() -> None:
                 if mid == match_id:
                     rich_match_data = r
                     break
+
+            # Se não há dados do cache oficial, mas temos rating raspado da partida
+            if not rich_match_data and match_id in scraped_ratings:
+                rich_match_data = {
+                    "faceit_rating": scraped_ratings[match_id]
+                }
 
             update_aggregate(aggregates[player_id], player_stats, rich_match_data)
 
