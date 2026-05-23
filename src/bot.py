@@ -135,232 +135,122 @@ async def on_ready() -> None:
 
 
 # ===================================================================
-# Views (Pagination)
+# Embed Generators (Single Consolidated Lists)
 # ===================================================================
 
 
-class RankingView(discord.ui.View):
-    def __init__(self, players: list[dict]):
-        super().__init__(timeout=180)
-        self.players = players
-        self.update_items()
+def get_ranking_embed(players: list[dict]) -> discord.Embed:
+    embed = discord.Embed(title="🏆 Ranking BRz Cards — Season 8 (players ativos com no mínimo 20 partidas na Season 8)", color=discord.Color.gold())
 
-    def get_embed(self) -> discord.Embed:
-        embed = discord.Embed(title="🏆 Ranking BRz Cards — Season 8 (players ativos com no mínimo 20 partidas na Season 8)", color=discord.Color.gold())
-
-        desc_lines = []
-        for i, p in enumerate(self.players):
-            pos = i + 1
-            
-            lvl = p.get('current_faceit_level')
-            try:
-                lvl_val = int(float(lvl)) if lvl is not None else 0
-                lvl_str = f"lvl {lvl_val}" if lvl_val > 0 else "Unranked"
-            except (ValueError, TypeError):
-                lvl_str = "Unranked"
-
-            elo = p.get('current_faceit_elo')
-            try:
-                elo_val = int(float(elo)) if elo is not None else 0
-                elo_str = f" ({elo_val} ELO)" if elo_val > 0 else ""
-            except (ValueError, TypeError):
-                elo_str = ""
-                
-            line = f"**{pos}.** {p['faceit_nickname']} — **{p['overall']} OVR** — {p['role']} — {lvl_str}{elo_str} — {p['season8_matches']} jogos"
-            desc_lines.append(line)
+    desc_lines = []
+    for i, p in enumerate(players):
+        pos = i + 1
         
-        embed.description = "\n".join(desc_lines)
+        lvl = p.get('current_faceit_level')
+        try:
+            lvl_val = int(float(lvl)) if lvl is not None else 0
+            lvl_str = f"lvl {lvl_val}" if lvl_val > 0 else "Unranked"
+        except (ValueError, TypeError):
+            lvl_str = "Unranked"
 
-        # Get latest update timestamp from the players data
-        latest_update = None
-        for p in self.players:
-            up = p.get('uploaded_at')
-            if up:
-                if latest_update is None or up > latest_update:
-                    latest_update = up
-                    
-        if latest_update:
-            from zoneinfo import ZoneInfo
-            lisbon_tz = ZoneInfo("Europe/Lisbon")
-            if latest_update.tzinfo is None:
-                latest_update = latest_update.replace(tzinfo=timezone.utc)
-            calc_pt = latest_update.astimezone(lisbon_tz)
-            dt_str = calc_pt.strftime("%d/%m/%Y às %H:%M (Horário de Portugal)")
-            embed.set_footer(text=f"Última atualização: {dt_str}")
+        elo = p.get('current_faceit_elo')
+        try:
+            elo_val = int(float(elo)) if elo is not None else 0
+            elo_str = f" ({elo_val} ELO)" if elo_val > 0 else ""
+        except (ValueError, TypeError):
+            elo_str = ""
+            
+        line = f"**{pos}.** {p['faceit_nickname']} — **{p['overall']} OVR** — {p['role']} — {lvl_str}{elo_str} — {p['season8_matches']} jogos"
+        desc_lines.append(line)
+    
+    embed.description = "\n".join(desc_lines)
 
-        return embed
+    # Get latest update timestamp from the players data
+    latest_update = None
+    for p in players:
+        up = p.get('uploaded_at')
+        if up:
+            if latest_update is None or up > latest_update:
+                latest_update = up
+                
+    if latest_update:
+        from zoneinfo import ZoneInfo
+        lisbon_tz = ZoneInfo("Europe/Lisbon")
+        if latest_update.tzinfo is None:
+            latest_update = latest_update.replace(tzinfo=timezone.utc)
+        calc_pt = latest_update.astimezone(lisbon_tz)
+        dt_str = calc_pt.strftime("%d/%m/%Y às %H:%M (Horário de Portugal)")
+        embed.set_footer(text=f"Última atualização: {dt_str}")
 
-    def update_items(self):
-        self.clear_items()
-        close_button = discord.ui.Button(label="Fechar", style=discord.ButtonStyle.danger)
-        close_button.callback = self.close_view
-        self.add_item(close_button)
-
-    async def close_view(self, interaction: discord.Interaction):
-        await interaction.response.edit_message(content="Menu de ranking fechado.", embed=None, view=None)
+    return embed
 
 
-class PaginatedStatView(discord.ui.View):
-    """Paginated embed for stat rankings (AIM, IMP, UTL, CON, INT, EXP)."""
+def get_stat_ranking_embed(players: list[dict], stat_name: str) -> discord.Embed:
+    stat_name_upper = stat_name.upper()
+    embed = discord.Embed(
+        title=f"🏆 Ranking {stat_name_upper} — BRz Cards Season 8",
+        color=discord.Color.gold(),
+    )
 
-    PER_PAGE = 10
+    desc_lines = []
+    for i, p in enumerate(players, start=1):
+        stat_val = p.get("stat_value")
+        try:
+            stat_display = int(round(float(stat_val))) if stat_val is not None else "?"
+        except (ValueError, TypeError):
+            stat_display = "?"
 
-    def __init__(self, players: list[dict], stat_name: str):
-        super().__init__(timeout=180)
-        self.players = players
-        self.stat_name = stat_name.upper()
-        self.page = 0
-        self.max_page = max(0, math.ceil(len(players) / self.PER_PAGE) - 1)
-        self._update_buttons()
+        overall = p.get("OVERALL", "?")
+        try:
+            overall = int(round(float(overall))) if overall is not None else "?"
+        except (ValueError, TypeError):
+            overall = "?"
 
-    def _update_buttons(self) -> None:
-        self.clear_items()
+        role = p.get("role", "?")
+        matches = p.get("season8_matches", "?")
 
-        prev_btn = discord.ui.Button(label="◀ Anterior", style=discord.ButtonStyle.secondary, disabled=(self.page == 0))
-        prev_btn.callback = self._prev
-        self.add_item(prev_btn)
-
-        next_btn = discord.ui.Button(label="▶ Próxima", style=discord.ButtonStyle.secondary, disabled=(self.page >= self.max_page))
-        next_btn.callback = self._next
-        self.add_item(next_btn)
-
-        close_btn = discord.ui.Button(label="✖ Fechar", style=discord.ButtonStyle.danger)
-        close_btn.callback = self._close
-        self.add_item(close_btn)
-
-    def get_embed(self) -> discord.Embed:
-        embed = discord.Embed(
-            title=f"🏆 Ranking {self.stat_name} — BRz Cards Season 8",
-            color=discord.Color.gold(),
+        line = (
+            f"**{i}.** {p['faceit_nickname']} — "
+            f"**{stat_name_upper} {stat_display}** — "
+            f"{overall} OVR — {role} — {matches} jogos"
         )
+        desc_lines.append(line)
 
-        start = self.page * self.PER_PAGE
-        end = start + self.PER_PAGE
-        page_players = self.players[start:end]
+    embed.description = "\n".join(desc_lines)
 
-        desc_lines = []
-        for i, p in enumerate(page_players, start=start + 1):
-            stat_val = p.get("stat_value")
-            try:
-                stat_display = int(round(float(stat_val))) if stat_val is not None else "?"
-            except (ValueError, TypeError):
-                stat_display = "?"
+    # Add latest update timestamp
+    latest_update = None
+    for p in players:
+        up = p.get("uploaded_at")
+        if up:
+            if latest_update is None or up > latest_update:
+                latest_update = up
+    if latest_update:
+        from zoneinfo import ZoneInfo
+        lisbon_tz = ZoneInfo("Europe/Lisbon")
+        if latest_update.tzinfo is None:
+            latest_update = latest_update.replace(tzinfo=timezone.utc)
+        calc_pt = latest_update.astimezone(lisbon_tz)
+        dt_str = calc_pt.strftime("%d/%m/%Y às %H:%M (Horário de Portugal)")
+        embed.set_footer(text=f"Última atualização: {dt_str}")
 
-            overall = p.get("OVERALL", "?")
-            try:
-                overall = int(round(float(overall))) if overall is not None else "?"
-            except (ValueError, TypeError):
-                overall = "?"
-
-            role = p.get("role", "?")
-            matches = p.get("season8_matches", "?")
-
-            line = (
-                f"**{i}.** {p['faceit_nickname']} — "
-                f"**{self.stat_name} {stat_display}** — "
-                f"{overall} OVR — {role} — {matches} jogos"
-            )
-            desc_lines.append(line)
-
-        embed.description = "\n".join(desc_lines)
-        embed.set_footer(text=f"Página {self.page + 1}/{self.max_page + 1}")
-
-        # Add latest update timestamp
-        latest_update = None
-        for p in page_players:
-            up = p.get("uploaded_at")
-            if up:
-                if latest_update is None or up > latest_update:
-                    latest_update = up
-        if latest_update:
-            from zoneinfo import ZoneInfo
-            lisbon_tz = ZoneInfo("Europe/Lisbon")
-            if latest_update.tzinfo is None:
-                latest_update = latest_update.replace(tzinfo=timezone.utc)
-            calc_pt = latest_update.astimezone(lisbon_tz)
-            dt_str = calc_pt.strftime("%d/%m/%Y às %H:%M (Horário de Portugal)")
-            embed.set_footer(text=f"Página {self.page + 1}/{self.max_page + 1} · Última atualização: {dt_str}")
-
-        return embed
-
-    async def _prev(self, interaction: discord.Interaction) -> None:
-        self.page = max(0, self.page - 1)
-        self._update_buttons()
-        await interaction.response.edit_message(embed=self.get_embed(), view=self)
-
-    async def _next(self, interaction: discord.Interaction) -> None:
-        self.page = min(self.max_page, self.page + 1)
-        self._update_buttons()
-        await interaction.response.edit_message(embed=self.get_embed(), view=self)
-
-    async def _close(self, interaction: discord.Interaction) -> None:
-        await interaction.response.edit_message(
-            content=f"Ranking de {self.stat_name} fechado.", embed=None, view=None,
-        )
+    return embed
 
 
-class PaginatedRulerView(discord.ui.View):
-    """Paginated embed for the consolidated community ruler."""
+def get_ruler_embed(ruler_data: list[dict]) -> discord.Embed:
+    embed = discord.Embed(
+        title="🏁 Régua da Comunidade — Season 8",
+        color=discord.Color.dark_gold(),
+    )
 
-    PER_PAGE = 10
+    desc_lines = []
+    for i, item in enumerate(ruler_data, start=1):
+        formatted_value = _format_ruler_value(item["value"], item["format_type"])
+        line = f"**{i}.** {item['label']} — {item['faceit_nickname']} ({formatted_value})"
+        desc_lines.append(line)
 
-    def __init__(self, ruler_data: list[dict]):
-        super().__init__(timeout=180)
-        self.ruler_data = ruler_data
-        self.page = 0
-        self.max_page = max(0, math.ceil(len(ruler_data) / self.PER_PAGE) - 1)
-        self._update_buttons()
-
-    def _update_buttons(self) -> None:
-        self.clear_items()
-
-        prev_btn = discord.ui.Button(label="◀ Anterior", style=discord.ButtonStyle.secondary, disabled=(self.page == 0))
-        prev_btn.callback = self._prev
-        self.add_item(prev_btn)
-
-        next_btn = discord.ui.Button(label="▶ Próxima", style=discord.ButtonStyle.secondary, disabled=(self.page >= self.max_page))
-        next_btn.callback = self._next
-        self.add_item(next_btn)
-
-        close_btn = discord.ui.Button(label="✖ Fechar", style=discord.ButtonStyle.danger)
-        close_btn.callback = self._close
-        self.add_item(close_btn)
-
-    def get_embed(self) -> discord.Embed:
-        embed = discord.Embed(
-            title="🏁 Régua da Comunidade — Season 8",
-            color=discord.Color.dark_gold(),
-        )
-
-        start = self.page * self.PER_PAGE
-        end = start + self.PER_PAGE
-        page_items = self.ruler_data[start:end]
-
-        desc_lines = []
-        for i, item in enumerate(page_items, start=start + 1):
-            formatted_value = _format_ruler_value(item["value"], item["format_type"])
-            line = f"**{i}.** {item['label']} — {item['faceit_nickname']} ({formatted_value})"
-            desc_lines.append(line)
-
-        embed.description = "\n".join(desc_lines)
-        embed.set_footer(text=f"Página {self.page + 1}/{self.max_page + 1}")
-
-        return embed
-
-    async def _prev(self, interaction: discord.Interaction) -> None:
-        self.page = max(0, self.page - 1)
-        self._update_buttons()
-        await interaction.response.edit_message(embed=self.get_embed(), view=self)
-
-    async def _next(self, interaction: discord.Interaction) -> None:
-        self.page = min(self.max_page, self.page + 1)
-        self._update_buttons()
-        await interaction.response.edit_message(embed=self.get_embed(), view=self)
-
-    async def _close(self, interaction: discord.Interaction) -> None:
-        await interaction.response.edit_message(
-            content="Régua da comunidade fechada.", embed=None, view=None,
-        )
+    embed.description = "\n".join(desc_lines)
+    return embed
 
 
 # ===================================================================
@@ -458,6 +348,9 @@ async def card_player_autocomplete(
             name = p.get('faceit_nickname') or ""
             if current.lower() in name.lower():
                 choices.append(app_commands.Choice(name=name, value=name))
+        
+        # Ordenar as opções alfabeticamente para uma navegação muito melhor
+        choices.sort(key=lambda c: c.name.lower())
         return choices[:25]
     except Exception as e:
         print(f"Autocomplete error: {e}")
@@ -480,8 +373,8 @@ async def ranking(interaction: discord.Interaction) -> None:
             await interaction.followup.send("Nenhum jogador encontrado no ranking.")
             return
 
-        view = RankingView(players)
-        await interaction.followup.send(embed=view.get_embed(), view=view)
+        embed = get_ranking_embed(players)
+        await interaction.followup.send(embed=embed)
     except Exception as e:
         print(f"Error fetching ranking: {e}")
         await interaction.followup.send("Ocorreu um erro ao carregar o ranking.")
@@ -509,8 +402,8 @@ async def _handle_stat_ranking(interaction: discord.Interaction, stat: str) -> N
             )
             return
 
-        view = PaginatedStatView(players, stat)
-        await interaction.followup.send(embed=view.get_embed(), view=view)
+        embed = get_stat_ranking_embed(players, stat)
+        await interaction.followup.send(embed=embed)
     except Exception as e:
         logger.exception("Error fetching stat ranking for %s", stat)
         await interaction.followup.send(
@@ -566,8 +459,8 @@ async def ruler(interaction: discord.Interaction) -> None:
             )
             return
 
-        view = PaginatedRulerView(ruler_data)
-        await interaction.followup.send(embed=view.get_embed(), view=view)
+        embed = get_ruler_embed(ruler_data)
+        await interaction.followup.send(embed=embed)
     except Exception as e:
         logger.exception("Error fetching ruler data")
         await interaction.followup.send(

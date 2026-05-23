@@ -48,6 +48,27 @@ def get_faceit_player_by_nickname(nickname: str) -> dict | None:
     return response.json()
 
 
+def get_faceit_player_by_id(player_id: str) -> dict | None:
+    url = f"{FACEIT_API_BASE_URL}/players/{player_id}"
+
+    response = requests.get(
+        url,
+        headers=HEADERS,
+        timeout=30,
+    )
+
+    if response.status_code == 404:
+        return None
+
+    if response.status_code != 200:
+        raise RuntimeError(
+            f"FACEIT API error for player_id '{player_id}' "
+            f"({response.status_code}): {response.text}"
+        )
+
+    return response.json()
+
+
 def read_faceit_nicknames(csv_path: Path) -> list[str]:
     if not csv_path.exists():
         raise FileNotFoundError(f"CSV file not found: {csv_path}")
@@ -100,11 +121,13 @@ def main() -> None:
     print(f"Output: {OUTPUT_CSV_PATH}")
     print("-" * 80)
 
-    if OUTPUT_CSV_PATH.exists():
-        import pandas as pd
-        df = pd.read_csv(OUTPUT_CSV_PATH, dtype=object)
+    import pandas as pd
 
-        base_cols = [
+    # Carrega ou inicializa o DataFrame
+    if OUTPUT_CSV_PATH.exists():
+        df = pd.read_csv(OUTPUT_CSV_PATH, dtype=object)
+    else:
+        df = pd.DataFrame(columns=[
             "faceit_nickname_input",
             "faceit_nickname_official",
             "faceit_player_id",
@@ -118,110 +141,113 @@ def main() -> None:
             "avatar",
             "faceit_url",
             "activated_at",
-        ]
-        for col in base_cols:
-            if col not in df.columns:
-                df[col] = None
+        ])
 
-        for nickname in nicknames:
-            player = get_faceit_player_by_nickname(nickname)
+    # Garantir que todas as colunas existem
+    base_cols = list(df.columns)
+    for col in [
+        "faceit_nickname_input", "faceit_nickname_official", "faceit_player_id",
+        "country", "steam_id_64", "steam_nickname", "cs2_skill_level",
+        "cs2_faceit_elo", "cs2_game_player_id", "cs2_game_player_name",
+        "avatar", "faceit_url", "activated_at"
+    ]:
+        if col not in base_cols:
+            df[col] = None
 
-            if player is None:
-                print(f"[NOT FOUND] {nickname}")
-                continue
-
-            row = build_enriched_player_row(nickname, player)
-
-            mask = (df["faceit_nickname_input"].str.lower() == nickname.lower()) | \
-                   (df["faceit_nickname_official"].str.lower() == nickname.lower())
-
-            if mask.any():
-                idx = df[mask].index[0]
-                for key, val in row.items():
-                    df.at[idx, key] = val
-                print(
-                    f"[UPDATED] {row['faceit_nickname_official']} | "
-                    f"level={row['cs2_skill_level']} | "
-                    f"elo={row['cs2_faceit_elo']}"
-                )
-            else:
-                new_row_df = pd.DataFrame([row])
-                df = pd.concat([df, new_row_df], ignore_index=True)
-                print(
-                    f"[ADDED] {row['faceit_nickname_official']} | "
-                    f"level={row['cs2_skill_level']} | "
-                    f"elo={row['cs2_faceit_elo']}"
-                )
-            time.sleep(0.15)
-
-        df.to_csv(OUTPUT_CSV_PATH, index=False, encoding="utf-8-sig")
-        print("-" * 80)
-        print(f"Updated in-place and saved enriched players base to: {OUTPUT_CSV_PATH}")
-        return
-
-    rows = []
-
+    input_changes = {} # Mapeia antigo_nick.lower() -> novo_nick (original case)
+    
     for nickname in nicknames:
-        player = get_faceit_player_by_nickname(nickname)
+        player_id = None
+        # Tenta achar o registro anterior para obter o player_id imutável
+        mask = (df["faceit_nickname_input"].str.lower() == nickname.lower()) | \
+               (df["faceit_nickname_official"].str.lower() == nickname.lower())
+        
+        if mask.any():
+            idx = df[mask].index[0]
+            player_id = df.at[idx, "faceit_player_id"]
+            if pd.isna(player_id) or not str(player_id).strip():
+                player_id = None
+
+        player = None
+        # Busca prioritária por ID imutável
+        if player_id:
+            try:
+                player = get_faceit_player_by_id(str(player_id).strip())
+                if player:
+                    print(f"[FETCH BY ID OK] ID={player_id} for input nickname '{nickname}'")
+            except Exception as e:
+                print(f"[FETCH BY ID FAILED] ID={player_id}: {e}. Retrying by nickname...")
+
+        # Fallback para busca por nickname
+        if player is None:
+            try:
+                player = get_faceit_player_by_nickname(nickname)
+            except Exception as e:
+                print(f"[FETCH BY NICK ERROR] Nickname '{nickname}': {e}")
 
         if player is None:
             print(f"[NOT FOUND] {nickname}")
-
-            rows.append(
-                {
-                    "faceit_nickname_input": nickname,
-                    "faceit_nickname_official": "",
-                    "faceit_player_id": "",
-                    "country": "",
-                    "steam_id_64": "",
-                    "steam_nickname": "",
-                    "cs2_skill_level": "",
-                    "cs2_faceit_elo": "",
-                    "cs2_game_player_id": "",
-                    "cs2_game_player_name": "",
-                    "avatar": "",
-                    "faceit_url": "",
-                    "activated_at": "",
-                }
-            )
             continue
 
+        official_nickname = player.get("nickname")
         row = build_enriched_player_row(nickname, player)
-        rows.append(row)
 
-        print(
-            f"[OK] {row['faceit_nickname_official']} | "
-            f"level={row['cs2_skill_level']} | "
-            f"elo={row['cs2_faceit_elo']} | "
-            f"country={row['country']}"
-        )
+        # Detectar troca de nickname
+        if nickname.lower() != official_nickname.lower():
+            print(f"🔥 [NICKNAME CHANGED] Player '{nickname}' is now officially '{official_nickname}'!")
+            input_changes[nickname.lower()] = official_nickname
+            # Ajustar o input na linha enriquecida também
+            row["faceit_nickname_input"] = official_nickname
+
+        # Atualiza ou adiciona no DataFrame
+        # A máscara deve buscar pelo ID se soubermos, ou pelo nick
+        if player_id:
+            mask_id = df["faceit_player_id"] == player_id
+        else:
+            mask_id = (df["faceit_nickname_input"].str.lower() == nickname.lower()) | \
+                      (df["faceit_nickname_official"].str.lower() == nickname.lower())
+
+        if mask_id.any():
+            idx = df[mask_id].index[0]
+            for key, val in row.items():
+                df.at[idx, key] = val
+            print(
+                f"[UPDATED] {row['faceit_nickname_official']} | "
+                f"level={row['cs2_skill_level']} | "
+                f"elo={row['cs2_faceit_elo']}"
+            )
+        else:
+            new_row_df = pd.DataFrame([row])
+            df = pd.concat([df, new_row_df], ignore_index=True)
+            print(
+                f"[ADDED] {row['faceit_nickname_official']} | "
+                f"level={row['cs2_skill_level']} | "
+                f"elo={row['cs2_faceit_elo']}"
+            )
         time.sleep(0.15)
 
+    # Grava o CSV enriquecido
     OUTPUT_CSV_PATH.parent.mkdir(parents=True, exist_ok=True)
-
-    fieldnames = [
-        "faceit_nickname_input",
-        "faceit_nickname_official",
-        "faceit_player_id",
-        "country",
-        "steam_id_64",
-        "steam_nickname",
-        "cs2_skill_level",
-        "cs2_faceit_elo",
-        "cs2_game_player_id",
-        "cs2_game_player_name",
-        "avatar",
-        "faceit_url",
-        "activated_at",
-    ]
-
-    with open(OUTPUT_CSV_PATH, mode="w", encoding="utf-8", newline="") as file:
-        writer = csv.DictWriter(file, fieldnames=fieldnames)
-        writer.writeheader()
-        writer.writerows(rows)
-
+    df.to_csv(OUTPUT_CSV_PATH, index=False, encoding="utf-8-sig")
     print("-" * 80)
     print(f"Saved enriched players base to: {OUTPUT_CSV_PATH}")
+
+    # Se houver mudanças de nicks de entrada, reescrevemos o brz_faceit_players.csv original
+    if input_changes:
+        updated_nicks = []
+        for nickname in nicknames:
+            low = nickname.lower()
+            if low in input_changes:
+                updated_nicks.append(input_changes[low])
+            else:
+                updated_nicks.append(nickname)
+        
+        with open(INPUT_CSV_PATH, mode="w", encoding="utf-8", newline="") as file:
+            writer = csv.writer(file)
+            writer.writerow(["faceit_nickname"])
+            for nick in updated_nicks:
+                writer.writerow([nick])
+        print(f" Sincronizado {len(input_changes)} novos nicknames no arquivo de entrada original: {INPUT_CSV_PATH}")
 
 
 if __name__ == "__main__":

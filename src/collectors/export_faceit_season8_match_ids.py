@@ -127,6 +127,11 @@ def main() -> None:
             )
 
             for match in matches:
+                # Contabilizar apenas partidas oficiais da fila Europeia de ELO ("Europe 5v5 Queue")
+                comp_name = match.get("competition_name")
+                if comp_name != "Europe 5v5 Queue":
+                    continue
+
                 output_rows.append(
                     {
                         "faceit_nickname": nickname,
