@@ -13,10 +13,60 @@ INPUT_MATCHES_CSV_PATH = BASE_DIR / "data" / "brz_faceit_season8_match_ids.csv"
 PLAYERS_CSV_PATH = BASE_DIR / "data" / "brz_faceit_players_enriched.csv"
 OUTPUT_CSV_PATH = BASE_DIR / "data" / "brz_faceit_season8_stats.csv"
 CACHE_DIR = BASE_DIR / "data" / "cache" / "faceit_match_stats"
+CACHE_ROUNDS_DIR = BASE_DIR / "data" / "cache" / "faceit_match_rounds"
 
 FACEIT_API_BASE_URL = "https://open.faceit.com/data/v4"
 
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
+CACHE_ROUNDS_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def load_or_fetch_match_rounds(player_id: str, nickname: str | None = None) -> list:
+    cache_path = CACHE_ROUNDS_DIR / f"{player_id}.json"
+    
+    if cache_path.exists():
+        try:
+            with open(cache_path, mode="r", encoding="utf-8") as file:
+                data = json.load(file)
+                payload = data.get("payload", {})
+                cs2 = payload.get("cs2", {})
+                rounds = cs2.get("match_rounds", cs2.get("matchRounds", []))
+                return rounds
+        except Exception as e:
+            print(f"  [CACHE ERROR] Failed to read cache for {nickname or player_id}: {e}")
+            
+    # Se não existir, baixa usando curl_cffi para contornar o Cloudflare
+    print(f"  [FETCH] Downloading internal match-rounds for '{nickname or player_id}' via curl_cffi...")
+    url = f"https://www.faceit.com/api/statistics/v1/cs2/players/{player_id}/match-rounds?limit=30"
+    
+    try:
+        from curl_cffi import requests as curl_requests
+        resp = curl_requests.get(url, impersonate="chrome", timeout=25)
+        if resp.status_code == 200:
+            data = resp.json()
+            with open(cache_path, mode="w", encoding="utf-8") as file:
+                json.dump(data, file, ensure_ascii=False, indent=2)
+            
+            payload = data.get("payload", {})
+            cs2 = payload.get("cs2", {})
+            rounds = cs2.get("match_rounds", cs2.get("matchRounds", []))
+            print(f"  [FETCH OK] Got {len(rounds)} rounds for {nickname or player_id}.")
+            time.sleep(1.5) # Pausa polida entre requisições
+            return rounds
+        else:
+            print(f"  [FETCH WARN] Internal API returned status {resp.status_code} for {nickname or player_id}")
+    except Exception as e:
+        print(f"  [FETCH ERROR] Failed to fetch internal stats for {nickname or player_id}: {e}")
+        
+    # Salvar cache vazio em caso de falha para não ficar martelando o servidor
+    try:
+        empty_data = {"payload": {"cs2": {"match_rounds": []}}}
+        with open(cache_path, mode="w", encoding="utf-8") as file:
+            json.dump(empty_data, file, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
+        
+    return []
 
 
 def get_api_key() -> str:
@@ -156,6 +206,14 @@ def init_player_aggregate(player: dict) -> dict:
         "sniper_kill_rate_values": [],
         "sniper_kill_rate_per_round_values": [],
 
+        "faceit_round_swing_avg_values": [],
+        "faceit_round_swing_avg_t_values": [],
+        "faceit_round_swing_avg_ct_values": [],
+        "faceit_rating_values": [],
+        "faceit_rating_t_values": [],
+        "faceit_rating_ct_values": [],
+        "rws_values": [],
+
         "recent_results": [],
     }
 
@@ -169,7 +227,7 @@ def add_metric_value(agg: dict, key: str, value) -> None:
     agg[key].append(parsed)
 
 
-def update_aggregate(agg: dict, player_stats: dict) -> None:
+def update_aggregate(agg: dict, player_stats: dict, rich_match_data: dict | None = None) -> None:
     stats = player_stats.get("player_stats", {})
 
     result = safe_int(stats.get("Result"))
@@ -255,6 +313,15 @@ def update_aggregate(agg: dict, player_stats: dict) -> None:
         stats.get("Sniper Kill Rate per Round"),
     )
 
+    if rich_match_data:
+        add_metric_value(agg, "faceit_round_swing_avg_values", rich_match_data.get("faceit_round_swing_avg"))
+        add_metric_value(agg, "faceit_round_swing_avg_t_values", rich_match_data.get("faceit_round_swing_avg_t"))
+        add_metric_value(agg, "faceit_round_swing_avg_ct_values", rich_match_data.get("faceit_round_swing_avg_ct"))
+        add_metric_value(agg, "faceit_rating_values", rich_match_data.get("faceit_rating"))
+        add_metric_value(agg, "faceit_rating_t_values", rich_match_data.get("faceit_rating_t"))
+        add_metric_value(agg, "faceit_rating_ct_values", rich_match_data.get("faceit_rating_ct"))
+        add_metric_value(agg, "rws_values", rich_match_data.get("rws"))
+
 
 def div(numerator: float, denominator: float) -> float:
     if denominator == 0:
@@ -324,6 +391,25 @@ def build_output_row(agg: dict) -> dict:
     sniper_kill_rate = avg(agg["sniper_kill_rate_values"])
     sniper_kill_rate_per_round = avg(agg["sniper_kill_rate_per_round_values"])
 
+    # New statistical variables from internal round data
+    faceit_round_swing_avg = avg(agg["faceit_round_swing_avg_values"])
+    faceit_round_swing_avg_t = avg(agg["faceit_round_swing_avg_t_values"])
+    faceit_round_swing_avg_ct = avg(agg["faceit_round_swing_avg_ct_values"])
+
+    faceit_rating = avg(agg["faceit_rating_values"])
+    faceit_rating_t = avg(agg["faceit_rating_t_values"])
+    faceit_rating_ct = avg(agg["faceit_rating_ct_values"])
+
+    total_kills = agg["kills"]
+    avg_kills = div(agg["kills"], matches)
+    total_deaths = agg["deaths"]
+    avg_deaths = div(agg["deaths"], matches)
+    total_assists = agg["assists"]
+    avg_assists = div(agg["assists"], matches)
+
+    avg_damage = div(agg["damage"], matches)
+    avg_rws = avg(agg["rws_values"])
+
     return {
         "faceit_nickname": agg["faceit_nickname"],
         "faceit_player_id": agg["faceit_player_id"],
@@ -378,6 +464,22 @@ def build_output_row(agg: dict) -> dict:
         "Total Damage": agg["damage"],
         "Total Rounds with extended stats": 0,
         "Total Kills with extended stats": kills,
+
+        # New variables added
+        "faceit_round_swing_avg": round(faceit_round_swing_avg, 4) if faceit_round_swing_avg else 0.0,
+        "faceit_round_swing_avg_t": round(faceit_round_swing_avg_t, 4) if faceit_round_swing_avg_t else 0.0,
+        "faceit_round_swing_avg_ct": round(faceit_round_swing_avg_ct, 4) if faceit_round_swing_avg_ct else 0.0,
+        "faceit_rating": round(faceit_rating, 4) if faceit_rating else 0.0,
+        "faceit_rating_t": round(faceit_rating_t, 4) if faceit_rating_t else 0.0,
+        "faceit_rating_ct": round(faceit_rating_ct, 4) if faceit_rating_ct else 0.0,
+        "total_kills": total_kills,
+        "avg_kills": round(avg_kills, 2),
+        "total_deaths": total_deaths,
+        "avg_deaths": round(avg_deaths, 2),
+        "total_assists": total_assists,
+        "avg_assists": round(avg_assists, 2),
+        "avg_damage": round(avg_damage, 2),
+        "avg_rws": round(avg_rws, 4) if avg_rws else 0.0,
     }
 
 
@@ -400,6 +502,14 @@ def main() -> None:
     print(f"Loaded {len(match_rows)} Season 8 match row(s).")
     print("-" * 80)
 
+    print("Pre-loading internal statistics (match-rounds) for players...")
+    match_rounds_cache = {}
+    for player_id, player in player_by_id.items():
+        nick = player.get("faceit_nickname_official") or player.get("faceit_nickname_input")
+        match_rounds_cache[player_id] = load_or_fetch_match_rounds(player_id, nick)
+    print("Pre-loading finished.")
+    print("-" * 80)
+
     for index, match_row in enumerate(match_rows, start=1):
         match_id = match_row.get("match_id")
         player_id = match_row.get("faceit_player_id")
@@ -416,7 +526,16 @@ def main() -> None:
                 print(f"[MISS] {index}/{len(match_rows)} {nickname} | match={match_id}")
                 continue
 
-            update_aggregate(aggregates[player_id], player_stats)
+            # Buscar dados ricos dessa partida no cache do jogador
+            rich_match_data = None
+            player_rounds = match_rounds_cache.get(player_id, [])
+            for r in player_rounds:
+                mid = r.get("match_id") or r.get("matchId")
+                if mid == match_id:
+                    rich_match_data = r
+                    break
+
+            update_aggregate(aggregates[player_id], player_stats, rich_match_data)
 
             if index % 25 == 0:
                 print(f"[OK] {index}/{len(match_rows)} processed")

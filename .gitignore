@@ -30,3 +30,6 @@ assets/generated/
 credentials/
 *.key.json
 *service-account*.json
+
+# Local browser profile
+chrome_profile/

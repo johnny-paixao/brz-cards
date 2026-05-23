@@ -133,6 +133,22 @@ SCHEMA_SEASON8_STATS = [
     SchemaField("Total_Damage",                     "INTEGER"),
     SchemaField("Total_Rounds_with_extended_stats", "INTEGER"),
     SchemaField("Total_Kills_with_extended_stats",  "INTEGER"),
+
+    # New variables added
+    SchemaField("faceit_round_swing_avg",            "FLOAT"),
+    SchemaField("faceit_round_swing_avg_t",          "FLOAT"),
+    SchemaField("faceit_round_swing_avg_ct",         "FLOAT"),
+    SchemaField("faceit_rating",                     "FLOAT"),
+    SchemaField("faceit_rating_t",                   "FLOAT"),
+    SchemaField("faceit_rating_ct",                  "FLOAT"),
+    SchemaField("total_kills",                       "INTEGER"),
+    SchemaField("avg_kills",                         "FLOAT"),
+    SchemaField("total_deaths",                      "INTEGER"),
+    SchemaField("avg_deaths",                        "FLOAT"),
+    SchemaField("total_assists",                     "INTEGER"),
+    SchemaField("avg_assists",                       "FLOAT"),
+    SchemaField("avg_damage",                        "FLOAT"),
+    SchemaField("avg_rws",                           "FLOAT"),
 ]
 
 SCHEMA_CARD_SCORES = [
@@ -343,6 +359,7 @@ def prepare_season8_stats() -> pd.DataFrame:
         "Total_1v1_Count", "Total_1v1_Wins", "Total_1v2_Count", "Total_1v2_Wins",
         "Total_Sniper_Kills", "Total_Damage", "Total_Rounds_extended_stats",
         "Total_Kills_extended_stats",
+        "total_kills", "total_deaths", "total_assists",
     ]
     for col in int_cols:
         if col in df.columns:
