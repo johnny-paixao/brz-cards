@@ -751,9 +751,13 @@ def _render_card(
     }
 
     for stat_key in ["aim", "imp", "utl", "con", "int", "exp"]:
+        val_str = str(player_data[stat_key])
+        if stat_key == "exp" and str(player_data.get("name", "")).strip().lower() == "jefao171":
+            val_str += "*"
+
         _draw_centered_text(
             draw=draw,
-            text=str(player_data[stat_key]),
+            text=val_str,
             box=BOXES[stat_key],
             **stat_style,
         )
