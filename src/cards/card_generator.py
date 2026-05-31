@@ -752,14 +752,22 @@ def _render_card(
 
     for stat_key in ["aim", "imp", "utl", "con", "int", "exp"]:
         val_str = str(player_data[stat_key])
+        
+        # Keep the font size identical by using a gold highlight color instead of an asterisk
+        custom_fill = stat_style["fill"]
         if stat_key == "exp" and str(player_data.get("name", "")).strip().lower() == "jefao171":
-            val_str += "*"
+            custom_fill = (255, 204, 0) # Gold highlight matching card accents!
 
         _draw_centered_text(
             draw=draw,
             text=val_str,
             box=BOXES[stat_key],
-            **stat_style,
+            kind=stat_style["kind"],
+            start_size=stat_style["start_size"],
+            fill=custom_fill,
+            stroke_fill=stat_style["stroke_fill"],
+            stroke_width=stat_style["stroke_width"],
+            min_size=stat_style["min_size"],
         )
 
     faceit_level = player_data.get("faceit_level")
