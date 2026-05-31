@@ -298,7 +298,7 @@ async def card(interaction: discord.Interaction, player: str) -> None:
         calculated_at = card_data.get("calculated_at")
 
         if calculated_at:
-            date_str = calculated_at.strftime("%Y%m%d") if hasattr(calculated_at, "strftime") else str(calculated_at)[:10].replace("-", "")
+            date_str = calculated_at.strftime("%Y%m%d%H%M") if hasattr(calculated_at, "strftime") else str(calculated_at).replace("-", "").replace(":", "").replace(" ", "")[:12]
             expected_filename = f"{player_identifier}_season8_{score_version}_{date_str}.png"
         else:
             expected_filename = f"{player_identifier}_season8_{score_version}.png"
