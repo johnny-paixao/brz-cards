@@ -753,10 +753,10 @@ def _render_card(
     for stat_key in ["aim", "imp", "utl", "con", "int", "exp"]:
         val_str = str(player_data[stat_key])
         
-        # Keep the font size identical by using a gold highlight color instead of an asterisk
+        # Keep the font size identical by using a warning red color instead of an asterisk to denote penalty
         custom_fill = stat_style["fill"]
         if stat_key == "exp" and str(player_data.get("name", "")).strip().lower() == "jefao171":
-            custom_fill = (255, 204, 0) # Gold highlight matching card accents!
+            custom_fill = (230, 40, 40) # Warning Red representing infraction/penalty!
 
         _draw_centered_text(
             draw=draw,
