@@ -155,6 +155,7 @@ SCHEMA_CARD_SCORES = [
     SchemaField("uploaded_at",                    "TIMESTAMP"),  # adicionada pelo script
     SchemaField("faceit_nickname",                "STRING"),
     SchemaField("faceit_player_id",              "STRING"),
+    SchemaField("country",                        "STRING"),
     SchemaField("status",                        "STRING"),
     SchemaField("role",                          "STRING"),
     SchemaField("season8_matches",               "INTEGER"),
@@ -241,6 +242,8 @@ def upload_table(
         write_disposition=write_disposition,
         # Timestamp columns: send as ISO string, BQ converte automaticamente
     )
+    if write_disposition == WriteDisposition.WRITE_APPEND:
+        job_config.schema_update_options = [bigquery.SchemaUpdateOption.ALLOW_FIELD_ADDITION]
 
     print(f"\n[{label}] Carregando {len(df)} rows -> {ref}")
     print(f"         Modo: {write_disposition}")

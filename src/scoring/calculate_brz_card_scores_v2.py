@@ -99,6 +99,11 @@ COLUMN_ALIASES = {
         "faceit_nickname_official",
         "faceit_nickname_input",
     ],
+    "country": [
+        "country",
+        "Country",
+        "country_code",
+    ],
     "player_id": [
         "faceit_player_id",
         "player_id",
@@ -666,6 +671,7 @@ def calculate_scores() -> pd.DataFrame:
     # -----------------------------------------------------------------------
     nickname = get_text_series(df, "nickname")
     player_id = get_text_series(df, "player_id")
+    country = get_text_series(df, "country", default="BR")
 
     matches = get_series(df, "matches")
 
@@ -862,6 +868,7 @@ def calculate_scores() -> pd.DataFrame:
         {
             "faceit_nickname": nickname,
             "faceit_player_id": player_id,
+            "country": country,
             "status": status,
             "role": role,
             "season8_matches": matches.astype(int),

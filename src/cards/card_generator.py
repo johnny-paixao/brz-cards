@@ -156,12 +156,12 @@ def _download_image(url: str) -> Image.Image | None:
 
 def _load_flag(country_code: str | None) -> Image.Image | None:
     if not country_code:
-        country_code = "PT"
+        country_code = "BR"
 
     flag_path = FLAGS_DIR / f"{country_code.lower()}.png"
 
     if not flag_path.exists():
-        flag_path = FLAGS_DIR / "pt.png"
+        flag_path = FLAGS_DIR / "br.png"
 
     if not flag_path.exists():
         return None
@@ -635,7 +635,7 @@ def _build_player_data(profile: dict, card_data: dict) -> dict:
     return {
         "player_id": profile.get("player_id"),
         "name": profile.get("display_name") or "Unknown",
-        "country_code": profile.get("country_code") or "PT",
+        "country_code": profile.get("country_code") or "BR",
         "faceit_level": faceit_level,
         "overall": _safe_int_from_score(card_data.get("overall_brz")),
         "role": card_data.get("role") or "RIFLER",
@@ -655,7 +655,7 @@ def _build_player_data_from_v2_csv(row: dict) -> dict:
     return {
         "player_id": faceit_nickname,
         "name": faceit_nickname,
-        "country_code": row.get("country") or "PT",
+        "country_code": row.get("country") or "BR",
         "faceit_level": faceit_level,
         "overall": _safe_int_from_score(row.get("OVERALL")),
         "role": row.get("ROLE") or "RIFLER",
