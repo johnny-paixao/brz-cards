@@ -649,7 +649,11 @@ def _build_player_data(profile: dict, card_data: dict) -> dict:
 
 
 def _build_player_data_from_v2_csv(row: dict) -> dict:
-    faceit_level = _parse_faceit_level(row.get("cs2_skill_level"))
+    faceit_level = _parse_faceit_level(
+        row.get("current_faceit_level")
+        or row.get("cs2_skill_level")
+        or row.get("faceit_level")
+    )
     faceit_nickname = row.get("faceit_nickname") or "Unknown"
 
     return {
