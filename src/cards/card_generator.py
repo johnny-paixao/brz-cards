@@ -658,7 +658,7 @@ def _build_player_data_from_v2_csv(row: dict) -> dict:
         "country_code": row.get("country") or "BR",
         "faceit_level": faceit_level,
         "overall": _safe_int_from_score(row.get("OVERALL")),
-        "role": row.get("ROLE") or "RIFLER",
+        "role": row.get("role") or row.get("ROLE") or "RIFLER",
         "aim": _safe_int_from_score(row.get("AIM")),
         "imp": _safe_int_from_score(row.get("IMP")),
         "utl": _safe_int_from_score(row.get("UTL")),
