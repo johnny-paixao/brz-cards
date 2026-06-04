@@ -44,6 +44,7 @@ def get_latest_player_card(display_name: str) -> dict | None:
           uploaded_at AS calculated_at
         FROM `{PROJECT_ID}.{DATASET_ID}.card_scores`
         WHERE LOWER(faceit_nickname) = LOWER(@display_name)
+          AND status = 'ACTIVE'
         ORDER BY uploaded_at DESC
         LIMIT 1
     """
@@ -93,10 +94,9 @@ def get_all_card_players() -> list[dict]:
           status,
           OVERALL as overall
         FROM `{PROJECT_ID}.{DATASET_ID}.card_scores`
-        WHERE 1=1
+        WHERE status = 'ACTIVE'
         QUALIFY ROW_NUMBER() OVER (PARTITION BY faceit_nickname ORDER BY uploaded_at DESC) = 1
         ORDER BY
-          CASE WHEN status = 'ACTIVE' THEN 0 ELSE 1 END ASC,
           OVERALL DESC,
           LOWER(faceit_nickname) ASC
     """

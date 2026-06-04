@@ -17,8 +17,9 @@ def main() -> None:
 
         for row in reader:
             nickname = row["faceit_nickname"].strip()
+            status = row.get("status", "ACTIVE").strip().upper()
 
-            if not nickname:
+            if not nickname or status == "INACTIVE":
                 continue
 
             output_path = generate_player_card_from_faceit_csv(nickname)
